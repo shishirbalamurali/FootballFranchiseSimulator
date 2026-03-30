@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* RETRO CARTOON DESIGN SYSTEM */
+:root {
+  --color-ink: #1a1a2e;
+  --color-paper: #faf8f0;
+  --color-cream: #f5f0e1;
+  --color-border: #1a1a2e;
+  --radius-retro: 0.75rem;
+  --shadow-retro: 4px 4px 0px rgba(26, 26, 46, 0.25);
+  --shadow-retro-lg: 6px 6px 0px rgba(26, 26, 46, 0.3);
+}
+
+@layer base {
+  body {
+    @apply font-sans text-ink overflow-x-hidden;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+}
+
+@layer components {
+  /* Core card */
+  .retro-card {
+    @apply relative rounded-xl bg-white;
+    border: 3px solid var(--color-ink);
+    box-shadow: var(--shadow-retro);
+  }
+
+  /* Pill-style badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider;
+    background: var(--color-cream);
+    color: var(--color-ink);
+  }
+
+  /* Tab buttons */
+  .retro-tab {
+    @apply px-6 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all;
+    border: 2px solid var(--color-ink);
+    background: var(--color-cream);
+    color: var(--color-ink);
+  }
+
+  .retro-tab:hover {
+    @apply scale-105;
+    box-shadow: var(--shadow-retro);
+  }
+
+  /* Primary action button */
+  .btn-retro {
+    @apply px-6 py-3 rounded-xl font-bold uppercase tracking-wider text-sm transition-all;
+    border: 3px solid var(--color-ink);
+    box-shadow: var(--shadow-retro);
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  .btn-retro:hover {
+    @apply -translate-y-0.5;
+    box-shadow: var(--shadow-retro-lg);
+  }
+
+  .btn-retro:active {
+    @apply translate-y-0;
+    box-shadow: 2px 2px 0px rgba(26, 26, 46, 0.25);
+  }
+}
+
+/* Utility text colors */
+.text-ink {
+  color: var(--color-ink);
+}
+
+.bg-paper {
+  background-color: var(--color-paper);
+}
+
+.bg-cream {
+  background-color: var(--color-cream);
+}
+
+/* Scrollbar Hide */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
