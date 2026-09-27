@@ -1,112 +1,146 @@
-// Logic to calculate season awards
+// Season awards & stat leaders
+//
+// Defensive positions only count defensive stats — QB sacks taken and QB
+// interceptions THROWN share stat keys with defensive sacks/INTs, so every
+// leaderboard here filters by position before sorting.
 
-// Logic to calculate season awards
+const DEFENSIVE_POSITIONS = new Set(['DL', 'DE', 'DT', 'LB', 'OLB', 'MLB', 'CB', 'S', 'FS', 'SS', 'DB']);
+const isDefender = (p) => DEFENSIVE_POSITIONS.has(p.position);
 
-// Helper: Score Calculations
-const calculateMVPScore = (p) => {
-    if (!p.stats || !p.stats.season) return 0;
-    const s = p.stats.season;
+// Flatten rosters once into [{...player, teamId, teamLocation, teamTheme}]
+function flattenRosters(rosters, teams) {
+    const teamById = new Map(teams.map(t => [t.id, t]));
+    const all = [];
+    Object.keys(rosters).forEach(teamId => {
+        const team = teamById.get(teamId);
+        (rosters[teamId] || []).forEach(p => {
+            all.push({ ...p, teamId, teamLocation: team?.location || teamId, teamTheme: team?.theme });
+        });
+    });
+    return all;
+}
+
+const season = (p) => p.stats?.season || {};
+
+// ── Award score formulas ──────────────────────────────────────────────────────
+
+// MVP — heavily QB-driven like the real award, but a 2,000-yard rusher or a
+// 25-sack edge can crash the race. Team wins matter for QBs.
+const calculateMVPScore = (p, standings = null) => {
+    const s = season(p);
     let score = 0;
 
     if (p.position === 'QB') {
-        score += (s.yards || 0) / 20; // Combined yards
-        score += (s.tds || 0) * 6; // Combined TDs
-        score -= (s.ints || 0) * 4;
-        score += ((s.wins || 0) * 10); // QB Wins matter
+        const att = s.attempts || 0;
+        if (att < 100) return 0; // backups don't win MVP
+        const cmpPct = att > 0 ? (s.completions || 0) / att : 0;
+        score += (s.yards || 0) / 18;            // passing volume
+        score += (s.tds || 0) * 5.5;             // total TDs (pass + rush)
+        score -= (s.ints || 0) * 5;
+        score += (s.rushYards || 0) / 14;        // dual-threat bonus
+        score += Math.max(0, cmpPct - 0.60) * 250; // efficiency above 60%
+        const wins = standings?.[p.teamId]?.wins || 0;
+        score += wins * 7;                       // QB wins drive the narrative
     } else if (p.position === 'RB') {
-        score += (s.yards || 0) / 10;
-        score += (s.tds || 0) * 6;
+        score += ((s.rushYards || 0) + (s.recYards || 0)) / 11;
+        score += ((s.rushTds || 0) + (s.recTds || 0)) * 6;
+        score -= (s.fumbles || 0) * 4;
     } else if (p.position === 'WR' || p.position === 'TE') {
-        score += (s.yards || 0) / 10;
-        score += (s.tds || 0) * 6;
-    } else {
-        score += (s.sacks || 0) * 4;
-        score += (s.ints || 0) * 6;
-        score += (s.tackles || 0);
+        score += (s.recYards || 0) / 11;
+        score += (s.recTds || 0) * 6;
+        score += (s.receptions || 0) * 0.3;
+    } else if (isDefender(p)) {
+        // Defensive MVPs are rare — require a monster season
+        score += (s.sacks || 0) * 4.5;
+        score += (s.ints || 0) * 5;
+        score += (s.defensiveTds || 0) * 8;
+        score += (s.tackles || 0) * 0.25;
+        score *= 0.8;
     }
     return score;
 };
 
 const calculateOPOYScore = (p) => {
-    if (!p.stats || !p.stats.season) return 0;
-    const s = p.stats.season;
+    const s = season(p);
     let score = 0;
-    score += (s.yards || 0) / 25;
-    score += (s.tds || 0) * 4;
+    score += ((s.rushYards || 0) + (s.recYards || 0)) / 10;
+    score += ((s.rushTds || 0) + (s.recTds || 0)) * 6;
+    score += (s.receptions || 0) * 0.35;
+    score -= (s.fumbles || 0) * 4;
     return score;
 };
 
 const calculateDPOYScore = (p) => {
-    if (['QB', 'RB', 'WR', 'TE', 'OL', 'K', 'P'].includes(p.position)) return 0;
-    if (!p.stats || !p.stats.season) return 0;
-    const s = p.stats.season;
+    if (!isDefender(p)) return 0;
+    const s = season(p);
     let score = 0;
-    score += (s.sacks || 0) * 5;
-    score += (s.ints || 0) * 6;
-    score += (s.tackles || 0) * 1;
+    score += (s.sacks || 0) * 7;
+    score += (s.ints || 0) * 8;
+    score += (s.tfl || 0) * 2;
+    score += (s.pd || 0) * 1.5;
+    score += (s.tackles || 0) * 0.6;
+    score += (s.defensiveTds || 0) * 10;
     return score;
 };
 
-export const getAwardRaces = (rosters, teams) => {
-    // Flatten all players
-    let allPlayers = [];
-    Object.keys(rosters).forEach(teamId => {
-        const teamRoster = rosters[teamId];
-        const team = teams.find(t => t.id === teamId);
-        teamRoster.forEach(p => {
-            allPlayers.push({ ...p, teamId, teamLocation: team?.location || teamId, teamTheme: team?.theme });
-        });
-    });
+// ── Public API ────────────────────────────────────────────────────────────────
 
-    const mvp = [...allPlayers].sort((a, b) => calculateMVPScore(b) - calculateMVPScore(a)).slice(0, 5);
-    const opoy = allPlayers.filter(p => ['QB', 'RB', 'WR', 'TE'].includes(p.position))
-        .sort((a, b) => calculateOPOYScore(b) - calculateOPOYScore(a)).slice(0, 5);
-    const dpoy = allPlayers.filter(p => !['QB', 'RB', 'WR', 'TE', 'OL', 'K', 'P'].includes(p.position))
-        .sort((a, b) => calculateDPOYScore(b) - calculateDPOYScore(a)).slice(0, 5);
+export const getAwardRaces = (rosters, teams, standings = null) => {
+    const allPlayers = flattenRosters(rosters, teams);
+
+    const mvp = allPlayers
+        .map(p => ({ p, score: calculateMVPScore(p, standings) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5).map(x => x.p);
+
+    const opoy = allPlayers
+        .filter(p => ['RB', 'WR', 'TE'].includes(p.position))
+        .map(p => ({ p, score: calculateOPOYScore(p) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5).map(x => x.p);
+
+    const dpoy = allPlayers
+        .filter(isDefender)
+        .map(p => ({ p, score: calculateDPOYScore(p) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5).map(x => x.p);
 
     return { mvp, opoy, dpoy };
 };
 
 export const getTopPlayers = (rosters, teams) => {
-    let allPlayers = [];
-    Object.keys(rosters).forEach(teamId => {
-        const teamRoster = rosters[teamId];
-        const team = teams.find(t => t.id === teamId);
-        teamRoster.forEach(p => {
-            allPlayers.push({ ...p, teamId, teamLocation: team?.location || teamId, teamTheme: team?.theme });
-        });
-    });
-    return allPlayers.sort((a, b) => b.ovr - a.ovr).slice(0, 10);
+    return flattenRosters(rosters, teams)
+        .sort((a, b) => b.ovr - a.ovr)
+        .slice(0, 10);
 };
 
 export const getStatLeaders = (rosters, teams) => {
-    let allPlayers = [];
-    Object.keys(rosters).forEach(teamId => {
-        const teamRoster = rosters[teamId];
-        const team = teams.find(t => t.id === teamId);
-        teamRoster.forEach(p => {
-            // Ensure stats exist
-            if (p.stats && p.stats.season) {
-                allPlayers.push({ ...p, teamId, teamLocation: team?.location || teamId });
-            }
-        });
-    });
+    const allPlayers = flattenRosters(rosters, teams).filter(p => p.stats?.season);
 
-    // Sorts
-    const passingYards = allPlayers.filter(p => p.position === 'QB').sort((a, b) => b.stats.season.yards - a.stats.season.yards).slice(0, 5);
-    const rushingYards = allPlayers.sort((a, b) => b.stats.season.rushYards - a.stats.season.rushYards).slice(0, 5);
-    const receivingYards = allPlayers.sort((a, b) => b.stats.season.recYards - a.stats.season.recYards).slice(0, 5);
-    const sacks = allPlayers.sort((a, b) => b.stats.season.sacks - a.stats.season.sacks).slice(0, 5);
-    const ints = allPlayers.sort((a, b) => b.stats.season.ints - a.stats.season.ints).slice(0, 5);
+    const top5 = (pool, key) =>
+        [...pool].sort((a, b) => (season(b)[key] || 0) - (season(a)[key] || 0)).slice(0, 5);
 
-    return { passingYards, rushingYards, receivingYards, sacks, ints };
-}
+    const qbs       = allPlayers.filter(p => p.position === 'QB');
+    const defenders = allPlayers.filter(isDefender);
 
-export const calculateSeasonAwards = (rosters, teams) => {
-    const races = getAwardRaces(rosters, teams);
+    return {
+        passingYards:   top5(qbs, 'yards'),
+        passingTds:     top5(qbs, 'tds'),
+        rushingYards:   top5(allPlayers, 'rushYards'),
+        receivingYards: top5(allPlayers, 'recYards'),
+        receptions:     top5(allPlayers, 'receptions'),
+        sacks:          top5(defenders, 'sacks'),
+        ints:           top5(defenders, 'ints'),
+        tackles:        top5(defenders, 'tackles'),
+    };
+};
+
+export const calculateSeasonAwards = (rosters, teams, standings = null) => {
+    const races = getAwardRaces(rosters, teams, standings);
     return {
         mvp: races.mvp[0],
         opoy: races.opoy[0],
-        dpoy: races.dpoy[0]
+        dpoy: races.dpoy[0],
     };
 };

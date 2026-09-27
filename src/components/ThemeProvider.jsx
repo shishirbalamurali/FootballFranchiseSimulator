@@ -1,50 +1,29 @@
-import { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useLayoutEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { TEAMS } from '../data/teams';
+import { buildTeamTheme } from '../styles/teamStyles';
+import { useThemePreview } from '../styles/themePreview';
+import { refreshCanvasTokens } from './ui/canvasTokens';
+
+// The ONE place team colours enter the design system. Each franchise gets its
+// own paper, ink, lettering, pattern and day/night mode (see teamStyles.js);
+// everything downstream just reads the resulting CSS custom properties.
 
 export default function ThemeProvider({ children }) {
-    const userTeamId = useGameStore(state => state.userTeamId);
-    const teams = useGameStore(state => state.teams);
+  const userTeamId = useGameStore(state => state.userTeamId);
+  const previewTeamId = useThemePreview(state => state.previewTeamId);
+  const teamId = previewTeamId ?? userTeamId;
 
-    // Get user team's theme
-    const getUserTheme = () => {
-        if (!userTeamId) return null;
+  useLayoutEffect(() => {
+    const team = TEAMS.find(t => t.id === teamId) ?? null;
+    const { mode, vars } = buildTeamTheme(team);
+    const root = document.documentElement;
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+    root.dataset.mode = mode;
+    root.dataset.team = team?.id ?? 'none';
+    root.style.colorScheme = mode === 'night' ? 'dark' : 'light';
+    refreshCanvasTokens();
+  }, [teamId]);
 
-        const team = TEAMS.find(t => t.id === userTeamId);
-        return team?.theme;
-    };
-
-    const theme = getUserTheme();
-
-    // Apply theme to CSS variables
-    useEffect(() => {
-        if (theme) {
-            const root = document.documentElement;
-            root.style.setProperty('--color-primary', theme.primary);
-            root.style.setProperty('--color-secondary', theme.secondary);
-            root.style.setProperty('--color-accent', theme.accent);
-            root.style.setProperty('--color-bg-a', theme.bgA);
-            root.style.setProperty('--color-bg-b', theme.bgB);
-
-            // Set pattern overlay based on type
-            const patterns = {
-                dots: `radial-gradient(circle, ${theme.primary} 1px, transparent 1px)`,
-                stripes: `repeating-linear-gradient(45deg, ${theme.primary}, ${theme.primary} 2px, transparent 2px, transparent 8px)`,
-                paper: `repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px)`
-            };
-            root.style.setProperty('--pattern-overlay', patterns[theme.pattern] || patterns.dots);
-        }
-    }, [theme]);
-
-    return (
-        <motion.div
-            className="min-h-screen"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-        >
-            {children}
-        </motion.div>
-    );
+  return children;
 }

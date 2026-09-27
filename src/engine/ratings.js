@@ -21,31 +21,44 @@ export function calculateTeamRatings(roster) {
     };
 
     // QB rating (top QB)
-    const qbs = roster.filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr);
+    const qbs = roster.filter(p => p.position === 'QB').sort((a, b) => Number(!!b.weeklyStarter) - Number(!!a.weeklyStarter) || b.ovr - a.ovr);
     ratings.offense.qb = qbs[0]?.ovr || 60;
 
     // OL rating (top 5 OL weighted)
     const ols = roster.filter(p => p.position === 'OL').sort((a, b) => b.ovr - a.ovr).slice(0, 5);
-    ratings.offense.ol = calculateWeightedAverage(ols.map(p => p.ovr));
+    ratings.offense.ol = calculateWeightedAverage(pad(ols, 5));
 
     // Skill rating (RB, WR, TE weighted)
     const rbs = roster.filter(p => p.position === 'RB').sort((a, b) => b.ovr - a.ovr).slice(0, 2);
     const wrs = roster.filter(p => p.position === 'WR').sort((a, b) => b.ovr - a.ovr).slice(0, 3);
     const tes = roster.filter(p => p.position === 'TE').sort((a, b) => b.ovr - a.ovr).slice(0, 2);
-    const skillPlayers = [...rbs, ...wrs, ...tes];
-    ratings.offense.skill = calculateWeightedAverage(skillPlayers.map(p => p.ovr));
+    ratings.offense.skill = calculateWeightedAverage([...pad(rbs, 2), ...pad(wrs, 3), ...pad(tes, 2)]);
 
     // Front 7 (DL + LB)
     const dls = roster.filter(p => p.position === 'DL').sort((a, b) => b.ovr - a.ovr).slice(0, 4);
     const lbs = roster.filter(p => p.position === 'LB').sort((a, b) => b.ovr - a.ovr).slice(0, 3);
-    const front7 = [...dls, ...lbs];
-    ratings.defense.front7 = calculateWeightedAverage(front7.map(p => p.ovr));
+    ratings.defense.front7 = calculateWeightedAverage([...pad(dls, 4), ...pad(lbs, 3)]);
 
     // Secondary (CB + S)
     const cbs = roster.filter(p => p.position === 'CB').sort((a, b) => b.ovr - a.ovr).slice(0, 3);
     const safeties = roster.filter(p => p.position === 'S').sort((a, b) => b.ovr - a.ovr).slice(0, 2);
-    const secondary = [...cbs, ...safeties];
-    ratings.defense.secondary = calculateWeightedAverage(secondary.map(p => p.ovr));
+    ratings.defense.secondary = calculateWeightedAverage([...pad(cbs, 3), ...pad(safeties, 2)]);
+
+    // Technique relative to OVR preserves the rating scale while allowing two
+    // equally rated units to have different matchup strengths. Each starting
+    // lineman contributes equally; a single star cannot hide four weak links.
+    const technique = (players, slots, base, keys) => {
+        const deltas = players.map(p => {
+            const attrs = p.attributes?.position || {};
+            const values = keys.map(k => attrs[k]).filter(Number.isFinite);
+            return values.length ? values.reduce((a,b)=>a+b,0) / values.length - p.ovr : 0;
+        });
+        return Math.max(40, Math.min(99, base + deltas.reduce((a,b)=>a+b,0) / slots));
+    };
+    ratings.offense.passBlock = technique(ols, 5, ratings.offense.ol, ['passBlock']);
+    ratings.offense.runBlock = technique(ols, 5, ratings.offense.ol, ['runBlock']);
+    ratings.defense.passRush = technique(dls, 4, ratings.defense.front7, ['finesseMoves','powerMoves']);
+    ratings.defense.runDefense = technique([...dls,...lbs], 7, ratings.defense.front7, ['tackle','blockShedding','pursuit']);
 
     // Special teams (K)
     const kicker = roster.find(p => p.position === 'K');
@@ -66,6 +79,16 @@ export function calculateTeamRatings(roster) {
 
     return ratings;
 }
+
+// A starting slot nobody fills is played by a replacement-level body. Without
+// this, one 99 OVR lineman rated the same as five of them, so shedding depth
+// cost nothing.
+const REPLACEMENT_OVR = 45;
+const pad = (players, slots) => {
+    const ovrs = players.map(p => p.ovr);
+    while (ovrs.length < slots) ovrs.push(REPLACEMENT_OVR);
+    return ovrs;
+};
 
 // Calculate weighted average (higher weight for top players)
 function calculateWeightedAverage(values) {

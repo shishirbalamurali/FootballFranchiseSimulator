@@ -1,0 +1,172 @@
+/* ============================================================================
+   GRIDIRON DESIGN TOKENS — cartoon retro
+   Single source of truth for colour, type, space, radius and elevation.
+   Nothing in src/ should hardcode a hex value. If a colour is needed, add it
+   here first with a semantic name.
+
+   Values below are the *default* (no team chosen) theme. ThemeProvider
+   overwrites the colour tokens per franchise via buildTeamTheme() in
+   src/styles/teamStyles.js — every team has its own paper, ink, lettering,
+   pattern, shadow colour and day/night mode.
+   ============================================================================ */
+
+:root {
+  /* ── Neutral ramp — kept for the handful of raw usages (canvas, legacy) ── */
+  --n-950: #0d0a10;
+  --n-900: #1a1520;
+  --n-850: #241e2b;
+  --n-800: #2e2736;
+  --n-750: #3a3243;
+  --n-700: #4a4153;
+  --n-600: #625870;
+  --n-500: #7e7488;
+  --n-400: #9c93a4;
+  --n-300: #bcb4c0;
+  --n-200: #dcd4d8;
+  --n-100: #efe7dc;
+  --n-50:  #fbf2dc;
+  --n-0:   #ffffff;
+
+  /* ── Ink — outlines, hard shadows, primary text on paper ──────────────── */
+  --ink: #16182b;
+  --shadow-color: var(--ink);
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────── */
+  --surface-shell:   #f3e6cf;   /* app background behind everything */
+  --surface-base:    #f3e6cf;   /* page background */
+  --surface-raised:  #fffaf0;   /* cards */
+  --surface-overlay: #fffaf0;   /* modals, popovers, menus */
+  --surface-sunken:  #ecdcc0;   /* wells, table stripes, inputs */
+  --surface-hover:   rgba(22, 24, 43, 0.06);
+  --surface-active:  rgba(22, 24, 43, 0.11);
+
+  /* ── Borders ───────────────────────────────────────────────────────────── */
+  --border-subtle:  rgba(22, 24, 43, 0.14);
+  --border-default: rgba(22, 24, 43, 0.32);
+  --border-strong:  var(--ink);
+
+  /* ── Text ──────────────────────────────────────────────────────────────── */
+  --text-primary:   #16182b;
+  --text-secondary: #3b3d52;
+  --text-muted:     #5a5b6e;
+  --text-faint:     #6f6c78;
+  --text-inverse:   #fffaf0;
+  --paper-text-primary:   #16182b;
+  --paper-text-secondary: #3b3d52;
+  --paper-text-muted:     #5a5b6e;
+  --paper-text-faint:     #6f6c78;
+
+  /* ── Semantic status — one hue each, four roles each ───────────────────── */
+  --positive-fg:     #157a3a;
+  --positive-bg:     rgba(34, 160, 80, 0.14);
+  --positive-border: rgba(21, 122, 58, 0.55);
+  --positive-solid:  #1f9d4c;
+
+  --negative-fg:     #c0261c;
+  --negative-bg:     rgba(220, 50, 40, 0.12);
+  --negative-border: rgba(192, 38, 28, 0.55);
+  --negative-solid:  #d8362a;
+
+  --warning-fg:      #a55a00;
+  --warning-bg:      rgba(245, 160, 20, 0.18);
+  --warning-border:  rgba(165, 90, 0, 0.55);
+  --warning-solid:   #f0a020;
+
+  --info-fg:         #1e5bc6;
+  --info-bg:         rgba(40, 110, 230, 0.12);
+  --info-border:     rgba(30, 91, 198, 0.55);
+  --info-solid:      #2f6fe0;
+
+  /* ── Rarity ladder — drives the collectible-card treatment ─────────────
+     Bronze <70 · Silver 70-79 · Gold 80-87 · Elite 88-93 · Legend 94+     */
+  --rarity-bronze:      #9c5a24;
+  --rarity-bronze-wash: rgba(176, 115, 63, 0.18);
+  --rarity-silver:      #5f6b7a;
+  --rarity-silver-wash: rgba(120, 135, 150, 0.18);
+  --rarity-gold:        #a87400;
+  --rarity-gold-wash:   rgba(230, 175, 30, 0.24);
+  --rarity-elite:       #7a2fd6;
+  --rarity-elite-wash:  rgba(150, 80, 240, 0.16);
+  --rarity-legend:      #d8401c;
+  --rarity-legend-wash: rgba(255, 94, 58, 0.18);
+
+  /* ── Team theme — set once by ThemeProvider, never recomputed per file ── */
+  --team-primary:      #e8552b;
+  --team-secondary:    #16254a;
+  --team-accent:       #ffc933;
+  --team-on-primary:   #fffaf0;
+  --team-on-accent:    #16182b;
+  --team-on-secondary: #fffaf0;
+  --team-text:         #b23a17;   /* team colour, readable as text on cards */
+  --team-tint-8:       rgba(232, 85, 43, 0.10);
+  --team-tint-16:      rgba(232, 85, 43, 0.18);
+  --team-tint-24:      rgba(232, 85, 43, 0.26);
+
+  --banner-bg: #e8552b;
+  --banner-fg: #fffaf0;
+  --title-fill: #ffc933;
+  --nav-bg:    #16182b;
+  --nav-fg:    #fbf2dc;
+  --chalk:     #fffaf0;   /* constant cream for lettering on team colours */
+  /* Broadcast field illustration (constant across team themes) */
+  --turf:        #2f7d3a;
+  --turf-stripe: #2a7134;
+  --turf-line:   rgba(255, 250, 240, 0.55);
+  --pigskin:     #8a4f24;
+  --first-down:  #ffd23f;
+
+  /* Pattern tiles (SVG data URIs, rebuilt per team) */
+  --pattern-image: none;
+  --pattern-size: 14px 14px;
+  --pattern-alpha: 0.07;
+  --banner-pattern-image: none;
+  --banner-pattern-size: 14px 14px;
+
+  /* ── Type ──────────────────────────────────────────────────────────────── */
+  --font-display: 'Bangers', 'Rubik', system-ui, sans-serif;
+  --font-body: 'Rubik', system-ui, -apple-system, sans-serif;
+  /* Condensed poster type for decisions/settings headlines; a serif for
+     narrative copy (story events, franchise history) so it reads as prose. */
+  --font-headline: 'Big Shoulders Display', 'Bangers', system-ui, sans-serif;
+  --font-editorial: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --display-tracking: 0.04em;
+
+  /* ── Spacing — 4pt grid, these values only ─────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ── Radius — chunky and friendly ──────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-full: 9999px;
+
+  /* ── Stroke — the cartoon outline ──────────────────────────────────────── */
+  --stroke:    2.5px;
+  --stroke-lg: 3px;
+
+  /* ── Elevation — outline + hard offset shadow, no blur ─────────────────
+     The outline is a spread shadow so it never shifts layout.            */
+  --elev-0: none;
+  --elev-1: 0 0 0 var(--stroke) var(--ink), 4px 4px 0 var(--stroke) var(--shadow-color);
+  --elev-2: 0 0 0 var(--stroke) var(--ink), 6px 6px 0 var(--stroke) var(--shadow-color);
+  --elev-3: 0 0 0 var(--stroke-lg) var(--ink), 10px 10px 0 var(--stroke-lg) var(--shadow-color);
+  --elev-press: 0 0 0 var(--stroke) var(--ink), 1px 1px 0 var(--stroke) var(--shadow-color);
+
+  /* ── Motion — durations referenced by MotionConfig and CSS alike ───────── */
+  --dur-micro: 120ms;
+  --dur-base:  200ms;
+  --dur-slow:  400ms;
+  --ease-out:  cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  --nav-height: 64px;
+  --content-max: 1440px;
+}

@@ -1,0 +1,944 @@
+{
+  "methodology": "Three independent seeded five-season store-action playthroughs; not browser-completed seasons. In-memory localStorage. User strategies are heuristics, not optimal play.",
+  "runs": [
+    {
+      "style": "autopilot",
+      "seed": 101,
+      "team": "bills",
+      "initialRating": 73,
+      "seasons": [
+        {
+          "year": 2024,
+          "rosterStart": 53,
+          "capStart": 90.4,
+          "ratingStart": 73,
+          "leagueRosterMin": 53,
+          "leagueRosterMax": 53,
+          "teamsOverCap": 0,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "bills",
+            "wins": 3,
+            "losses": 14,
+            "ties": 0,
+            "pf": 254,
+            "pa": 410,
+            "confWins": 3,
+            "divWins": 3,
+            "streak": 1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.33,
+          "qb": {
+            "name": "Mason Hill",
+            "ovr": 78,
+            "stats": {
+              "career": {
+                "attempts": 544,
+                "completions": 398,
+                "yards": 2918,
+                "tds": 7,
+                "sacks": 47,
+                "carries": 8,
+                "rushYards": 74,
+                "ints": 8
+              },
+              "season": {
+                "attempts": 544,
+                "completions": 398,
+                "yards": 2918,
+                "tds": 7,
+                "sacks": 47,
+                "carries": 8,
+                "rushYards": 74,
+                "ints": 8
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "jaguars",
+          "offseasonRoster": 31,
+          "staleRatings": 20,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2147313
+        },
+        {
+          "year": 2025,
+          "rosterStart": 38,
+          "capStart": 77.17,
+          "ratingStart": 71,
+          "leagueRosterMin": 38,
+          "leagueRosterMax": 63,
+          "teamsOverCap": 18,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "bills",
+            "wins": 6,
+            "losses": 11,
+            "ties": 0,
+            "pf": 293,
+            "pa": 299,
+            "confWins": 5,
+            "divWins": 3,
+            "streak": -4
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 22.41,
+          "qb": {
+            "name": "Hunter Green",
+            "ovr": 78,
+            "stats": {
+              "career": {
+                "attempts": 527,
+                "completions": 373,
+                "yards": 3985,
+                "sacks": 41,
+                "tds": 13,
+                "ints": 12,
+                "carries": 7,
+                "rushYards": 62
+              },
+              "season": {
+                "attempts": 527,
+                "completions": 373,
+                "yards": 3985,
+                "sacks": 41,
+                "tds": 13,
+                "ints": 12,
+                "carries": 7,
+                "rushYards": 62
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "eagles",
+          "offseasonRoster": 25,
+          "staleRatings": 26,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2925183
+        },
+        {
+          "year": 2026,
+          "rosterStart": 32,
+          "capStart": 71.58,
+          "ratingStart": 70,
+          "leagueRosterMin": 32,
+          "leagueRosterMax": 62,
+          "teamsOverCap": 25,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "bills",
+            "wins": 7,
+            "losses": 10,
+            "ties": 0,
+            "pf": 302,
+            "pa": 376,
+            "confWins": 5,
+            "divWins": 2,
+            "streak": -2
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.82,
+          "qb": {
+            "name": "Hunter Green",
+            "ovr": 79,
+            "stats": {
+              "career": {
+                "attempts": 1081,
+                "completions": 750,
+                "yards": 7351,
+                "sacks": 108,
+                "tds": 28,
+                "ints": 17,
+                "carries": 21,
+                "rushYards": 124,
+                "rushTds": 1
+              },
+              "season": {
+                "attempts": 554,
+                "completions": 377,
+                "yards": 3366,
+                "sacks": 67,
+                "carries": 14,
+                "rushYards": 62,
+                "ints": 5,
+                "tds": 15,
+                "rushTds": 1
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "steelers",
+          "offseasonRoster": 23,
+          "staleRatings": 29,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 3577176
+        },
+        {
+          "year": 2027,
+          "rosterStart": 30,
+          "capStart": 75.66,
+          "ratingStart": 73,
+          "leagueRosterMin": 30,
+          "leagueRosterMax": 65,
+          "teamsOverCap": 24,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "bills",
+            "wins": 7,
+            "losses": 10,
+            "ties": 0,
+            "pf": 351,
+            "pa": 369,
+            "confWins": 4,
+            "divWins": 3,
+            "streak": -2
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.25,
+          "qb": {
+            "name": "Hunter Green",
+            "ovr": 81,
+            "stats": {
+              "career": {
+                "attempts": 1607,
+                "completions": 1112,
+                "yards": 10566,
+                "sacks": 164,
+                "tds": 47,
+                "ints": 21,
+                "carries": 37,
+                "rushYards": 243,
+                "rushTds": 1
+              },
+              "season": {
+                "attempts": 526,
+                "completions": 362,
+                "yards": 3215,
+                "tds": 19,
+                "sacks": 56,
+                "carries": 16,
+                "rushYards": 119,
+                "ints": 4
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "texans",
+          "offseasonRoster": 21,
+          "staleRatings": 29,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4216318
+        },
+        {
+          "year": 2028,
+          "rosterStart": 28,
+          "capStart": 71.01,
+          "ratingStart": 78,
+          "leagueRosterMin": 28,
+          "leagueRosterMax": 69,
+          "teamsOverCap": 26,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "bills",
+            "wins": 8,
+            "losses": 9,
+            "ties": 0,
+            "pf": 329,
+            "pa": 354,
+            "confWins": 5,
+            "divWins": 3,
+            "streak": -1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 20.22,
+          "qb": {
+            "name": "Hunter Green",
+            "ovr": 83,
+            "stats": {
+              "career": {
+                "attempts": 2157,
+                "completions": 1474,
+                "yards": 14218,
+                "sacks": 212,
+                "tds": 68,
+                "ints": 38,
+                "carries": 41,
+                "rushYards": 262,
+                "rushTds": 1
+              },
+              "season": {
+                "attempts": 550,
+                "completions": 362,
+                "yards": 3652,
+                "tds": 21,
+                "ints": 17,
+                "sacks": 48,
+                "carries": 4,
+                "rushYards": 19
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "browns",
+          "offseasonRoster": 21,
+          "staleRatings": 29,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4873392
+        }
+      ]
+    },
+    {
+      "style": "rebuild",
+      "seed": 102,
+      "team": "cardinals",
+      "initialRating": 72,
+      "seasons": [
+        {
+          "year": 2024,
+          "rosterStart": 53,
+          "capStart": 85.2,
+          "ratingStart": 72,
+          "leagueRosterMin": 53,
+          "leagueRosterMax": 53,
+          "teamsOverCap": 1,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "cardinals",
+            "wins": 5,
+            "losses": 12,
+            "ties": 0,
+            "pf": 296,
+            "pa": 424,
+            "confWins": 3,
+            "divWins": 0,
+            "streak": -3
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 22.41,
+          "qb": {
+            "name": "Julian Jones",
+            "ovr": 94,
+            "stats": {
+              "career": {
+                "attempts": 587,
+                "completions": 387,
+                "yards": 4022,
+                "tds": 18,
+                "ints": 24,
+                "sacks": 56,
+                "carries": 8,
+                "rushYards": 19
+              },
+              "season": {
+                "attempts": 587,
+                "completions": 387,
+                "yards": 4022,
+                "tds": 18,
+                "ints": 24,
+                "sacks": 56,
+                "carries": 8,
+                "rushYards": 19
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "bills",
+          "offseasonRoster": 37,
+          "staleRatings": 18,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2144719
+        },
+        {
+          "year": 2025,
+          "rosterStart": 53,
+          "capStart": 191.99,
+          "ratingStart": 81,
+          "leagueRosterMin": 53,
+          "leagueRosterMax": 61,
+          "teamsOverCap": 18,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "cardinals",
+            "wins": 7,
+            "losses": 10,
+            "ties": 0,
+            "pf": 309,
+            "pa": 367,
+            "confWins": 5,
+            "divWins": 2,
+            "streak": -1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 22.25,
+          "qb": {
+            "name": "Anthony White",
+            "ovr": 95,
+            "stats": {
+              "career": {
+                "attempts": 222,
+                "completions": 165,
+                "yards": 1489,
+                "ints": 3,
+                "sacks": 12,
+                "tds": 4,
+                "carries": 2,
+                "rushYards": 15
+              },
+              "season": {
+                "attempts": 222,
+                "completions": 165,
+                "yards": 1489,
+                "ints": 3,
+                "sacks": 12,
+                "tds": 4,
+                "carries": 2,
+                "rushYards": 15
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "bucs",
+          "offseasonRoster": 43,
+          "staleRatings": 26,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2930014
+        },
+        {
+          "year": 2026,
+          "rosterStart": 52,
+          "capStart": 205.42,
+          "ratingStart": 82,
+          "leagueRosterMin": 52,
+          "leagueRosterMax": 63,
+          "teamsOverCap": 24,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "cardinals",
+            "wins": 8,
+            "losses": 9,
+            "ties": 0,
+            "pf": 281,
+            "pa": 347,
+            "confWins": 4,
+            "divWins": 4,
+            "streak": -5
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.49,
+          "qb": {
+            "name": "Austin Robinson",
+            "ovr": 96,
+            "stats": {
+              "career": {
+                "attempts": 189,
+                "completions": 140,
+                "yards": 785,
+                "tds": 5,
+                "ints": 3,
+                "sacks": 9,
+                "carries": 4,
+                "rushYards": 6
+              },
+              "season": {
+                "attempts": 189,
+                "completions": 140,
+                "yards": 785,
+                "tds": 5,
+                "ints": 3,
+                "sacks": 9,
+                "carries": 4,
+                "rushYards": 6
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "bills",
+          "offseasonRoster": 34,
+          "staleRatings": 29,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 3590665
+        },
+        {
+          "year": 2027,
+          "rosterStart": 49,
+          "capStart": 204.6,
+          "ratingStart": 84,
+          "leagueRosterMin": 49,
+          "leagueRosterMax": 65,
+          "teamsOverCap": 27,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "cardinals",
+            "wins": 7,
+            "losses": 10,
+            "ties": 0,
+            "pf": 332,
+            "pa": 347,
+            "confWins": 4,
+            "divWins": 3,
+            "streak": -2
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.79,
+          "qb": {
+            "name": "DeAndre Young",
+            "ovr": 95,
+            "stats": {
+              "career": {
+                "attempts": 179,
+                "completions": 104,
+                "yards": 700,
+                "tds": 3,
+                "ints": 4,
+                "sacks": 24,
+                "carries": 4,
+                "rushYards": 15
+              },
+              "season": {
+                "attempts": 179,
+                "completions": 104,
+                "yards": 700,
+                "tds": 3,
+                "ints": 4,
+                "sacks": 24,
+                "carries": 4,
+                "rushYards": 15
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "cowboys",
+          "offseasonRoster": 29,
+          "staleRatings": 30,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4239593
+        },
+        {
+          "year": 2028,
+          "rosterStart": 41,
+          "capStart": 205.43,
+          "ratingStart": 86,
+          "leagueRosterMin": 41,
+          "leagueRosterMax": 64,
+          "teamsOverCap": 25,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "cardinals",
+            "wins": 8,
+            "losses": 9,
+            "ties": 0,
+            "pf": 322,
+            "pa": 362,
+            "confWins": 5,
+            "divWins": 4,
+            "streak": 4
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 20.9,
+          "qb": {
+            "name": "Anthony White",
+            "ovr": 96,
+            "stats": {
+              "career": {
+                "attempts": 1493,
+                "completions": 1081,
+                "yards": 9774,
+                "ints": 16,
+                "sacks": 74,
+                "tds": 43,
+                "carries": 17,
+                "rushYards": 71
+              },
+              "season": {
+                "attempts": 421,
+                "completions": 306,
+                "yards": 2538,
+                "ints": 8,
+                "sacks": 15,
+                "tds": 9,
+                "carries": 6,
+                "rushYards": 37
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "cowboys",
+          "offseasonRoster": 26,
+          "staleRatings": 29,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4865845
+        }
+      ]
+    },
+    {
+      "style": "win-now",
+      "seed": 103,
+      "team": "patriots",
+      "initialRating": 86,
+      "seasons": [
+        {
+          "year": 2024,
+          "rosterStart": 53,
+          "capStart": 205.2,
+          "ratingStart": 86,
+          "leagueRosterMin": 53,
+          "leagueRosterMax": 53,
+          "teamsOverCap": 1,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "patriots",
+            "wins": 11,
+            "losses": 6,
+            "ties": 0,
+            "pf": 518,
+            "pa": 299,
+            "confWins": 8,
+            "divWins": 3,
+            "streak": -1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 22.37,
+          "qb": {
+            "name": "Luke King",
+            "ovr": 95,
+            "stats": {
+              "career": {
+                "attempts": 611,
+                "completions": 404,
+                "yards": 4490,
+                "tds": 44,
+                "ints": 26,
+                "sacks": 36,
+                "carries": 14,
+                "rushYards": 56
+              },
+              "season": {
+                "attempts": 611,
+                "completions": 404,
+                "yards": 4490,
+                "tds": 44,
+                "ints": 26,
+                "sacks": 36,
+                "carries": 14,
+                "rushYards": 56
+              }
+            }
+          },
+          "madePlayoffs": true,
+          "champion": "colts",
+          "offseasonRoster": 33,
+          "staleRatings": 23,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2148601
+        },
+        {
+          "year": 2025,
+          "rosterStart": 43,
+          "capStart": 202.5,
+          "ratingStart": 83,
+          "leagueRosterMin": 43,
+          "leagueRosterMax": 63,
+          "teamsOverCap": 20,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "patriots",
+            "wins": 7,
+            "losses": 10,
+            "ties": 0,
+            "pf": 325,
+            "pa": 340,
+            "confWins": 4,
+            "divWins": 2,
+            "streak": -1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.88,
+          "qb": {
+            "name": "Aiden Davenport",
+            "ovr": 95,
+            "stats": {
+              "career": {
+                "attempts": 189,
+                "completions": 127,
+                "yards": 1036,
+                "tds": 4,
+                "ints": 3,
+                "sacks": 17,
+                "carries": 2,
+                "rushYards": 4
+              },
+              "season": {
+                "attempts": 189,
+                "completions": 127,
+                "yards": 1036,
+                "tds": 4,
+                "ints": 3,
+                "sacks": 17,
+                "carries": 2,
+                "rushYards": 4
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "chiefs",
+          "offseasonRoster": 33,
+          "staleRatings": 27,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 2934345
+        },
+        {
+          "year": 2026,
+          "rosterStart": 43,
+          "capStart": 204.88,
+          "ratingStart": 86,
+          "leagueRosterMin": 43,
+          "leagueRosterMax": 63,
+          "teamsOverCap": 27,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "patriots",
+            "wins": 9,
+            "losses": 8,
+            "ties": 0,
+            "pf": 368,
+            "pa": 341,
+            "confWins": 5,
+            "divWins": 3,
+            "streak": -1
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 21.89,
+          "qb": {
+            "name": "Hunter Carter",
+            "ovr": 96,
+            "stats": {
+              "career": {
+                "attempts": 74,
+                "completions": 52,
+                "yards": 469,
+                "tds": 2,
+                "ints": 3,
+                "sacks": 11
+              },
+              "season": {
+                "attempts": 74,
+                "completions": 52,
+                "yards": 469,
+                "tds": 2,
+                "ints": 3,
+                "sacks": 11
+              }
+            }
+          },
+          "madePlayoffs": false,
+          "champion": "cowboys",
+          "offseasonRoster": 27,
+          "staleRatings": 28,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 3577095
+        },
+        {
+          "year": 2027,
+          "rosterStart": 43,
+          "capStart": 203.72,
+          "ratingStart": 87,
+          "leagueRosterMin": 43,
+          "leagueRosterMax": 64,
+          "teamsOverCap": 28,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "patriots",
+            "wins": 10,
+            "losses": 7,
+            "ties": 0,
+            "pf": 362,
+            "pa": 314,
+            "confWins": 8,
+            "divWins": 5,
+            "streak": -2
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 20.31,
+          "qb": {
+            "name": "Dylan Williams",
+            "ovr": 96,
+            "stats": {
+              "career": {
+                "attempts": 661,
+                "completions": 455,
+                "yards": 4241,
+                "tds": 25,
+                "sacks": 37,
+                "carries": 17,
+                "rushYards": 37,
+                "rushTds": 1,
+                "ints": 9
+              },
+              "season": {
+                "attempts": 661,
+                "completions": 455,
+                "yards": 4241,
+                "tds": 25,
+                "sacks": 37,
+                "carries": 17,
+                "rushYards": 37,
+                "rushTds": 1,
+                "ints": 9
+              }
+            }
+          },
+          "madePlayoffs": true,
+          "champion": "browns",
+          "offseasonRoster": 30,
+          "staleRatings": 31,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4237826
+        },
+        {
+          "year": 2028,
+          "rosterStart": 42,
+          "capStart": 202.81,
+          "ratingStart": 89,
+          "leagueRosterMin": 42,
+          "leagueRosterMax": 65,
+          "teamsOverCap": 26,
+          "teamsMissingQB": 0,
+          "teamsUnder22": 0,
+          "scheduleErrors": [],
+          "record": {
+            "id": "patriots",
+            "wins": 13,
+            "losses": 4,
+            "ties": 0,
+            "pf": 376,
+            "pa": 240,
+            "confWins": 11,
+            "divWins": 6,
+            "streak": 5
+          },
+          "playedGames": 272,
+          "pointsPerTeamGame": 20.28,
+          "qb": {
+            "name": "Dylan Williams",
+            "ovr": 96,
+            "stats": {
+              "career": {
+                "attempts": 1307,
+                "completions": 922,
+                "yards": 8339,
+                "tds": 49,
+                "sacks": 70,
+                "carries": 25,
+                "rushYards": 68,
+                "rushTds": 1,
+                "ints": 17
+              },
+              "season": {
+                "attempts": 646,
+                "completions": 467,
+                "yards": 4098,
+                "tds": 24,
+                "sacks": 33,
+                "carries": 8,
+                "rushYards": 31,
+                "ints": 8
+              }
+            }
+          },
+          "madePlayoffs": true,
+          "champion": "bengals",
+          "offseasonRoster": 26,
+          "staleRatings": 30,
+          "draftPicks": 224,
+          "uniqueDraftPlayers": 224,
+          "saveBytes": 4868971
+        }
+      ]
+    }
+  ],
+  "probes": {
+    "minimumExtension": {
+      "player": "Ethan Sims",
+      "ovr": 87,
+      "before": {
+        "salary": 5.27,
+        "years": 4,
+        "yearsLeft": 1
+      },
+      "after": {
+        "salary": 1,
+        "years": 6,
+        "yearsLeft": 6
+      }
+    },
+    "repeatedOffseasonTraining": {
+      "before": 96,
+      "after": 99,
+      "note": "store-only; UI reachability must be checked"
+    },
+    "injuredQB": {
+      "id": "QB-1789958453860-rnsaah0zb",
+      "stat": {
+        "player": {
+          "id": "QB-1789958453860-rnsaah0zb",
+          "name": "Dylan Williams",
+          "position": "QB",
+          "ovr": 99,
+          "devTrait": "Superstar"
+        },
+        "attempts": 36,
+        "completions": 28,
+        "yards": 163,
+        "ints": 1,
+        "sacks": 3
+      }
+    },
+    "missingLineRating": {
+      "oneLineman": 99,
+      "fiveLineman": 99
+    }
+  }
+}

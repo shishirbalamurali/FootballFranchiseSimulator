@@ -1,426 +1,342 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../store/gameStore';
 import { TEAMS } from '../data/teams';
-import { motion, AnimatePresence } from 'framer-motion';
-import Button from '../components/Button';
+import WeekLoadingScreen from '../components/WeekLoadingScreen';
+import GameBroadcast from '../components/GameBroadcast';
+import { usePreference, SIM_SPEEDS } from '../components/preferences';
+import {
+  Card, CardHeader, CardBody, Button, Badge, TeamCrest, Modal, Stat,
+  EmptyState, cx, IconArrowRight, IconFastForward,
+} from '../components/ui';
+
+const ROUND_NAMES = ['', 'Wild card', 'Divisional', 'Conference', 'Super Bowl'];
+
+function getRoundGames(bracket) {
+  if (!bracket) return [];
+  const { round, afc, nfc, sb } = bracket;
+  if (round === 1) return [...afc.wc, ...nfc.wc];
+  if (round === 2) return [...afc.div, ...nfc.div];
+  if (round === 3) return [...afc.conf, ...nfc.conf];
+  if (round === 4) return sb ? [sb] : [];
+  return [];
+}
+
+function MatchupSide({ team, score, played, won, record, seed, size }) {
+  return (
+    <div className={cx('flex items-center gap-2 px-3 py-2', played && !won && 'opacity-45')}>
+      {seed && <span className="w-3 shrink-0 text-micro tabular-nums text-fg-faint">{seed}</span>}
+      <TeamCrest team={team} size="xs" decorative />
+      <span className={cx('min-w-0 flex-1 truncate text-label', won ? 'font-bold text-fg' : 'text-fg-secondary')}>
+        {team?.abbreviation ?? '—'}
+      </span>
+      <span className="shrink-0 text-label tabular-nums text-fg-faint">{record}</span>
+      <span className={cx('w-6 shrink-0 text-right font-display tabular-nums',
+        size === 'lg' ? 'text-h2' : 'text-h3', won ? 'text-fg' : 'text-fg-muted')}>
+        {score ?? ''}
+      </span>
+    </div>
+  );
+}
+
+// ── One matchup ─────────────────────────────────────────────────────────────
+function Matchup({ matchup, userTeamId, standings, seedOf, size = 'md' }) {
+  if (!matchup) {
+    return (
+      <div className={cx(
+        'grid place-items-center rounded-card border border-dashed border-line-subtle',
+        size === 'lg' ? 'h-[92px] w-64' : 'h-[76px] w-full',
+      )}>
+        <span className="text-micro uppercase text-fg-faint">To be decided</span>
+      </div>
+    );
+  }
+  const home = TEAMS.find(t => t.id === matchup.homeTeamId);
+  const away = TEAMS.find(t => t.id === matchup.awayTeamId);
+  const rec = (id) => { const s = standings[id]; return s ? `${s.wins}-${s.losses}` : ''; };
+  const won = (id) => matchup.played && matchup.winnerId === id;
+  const involvesUser = matchup.homeTeamId === userTeamId || matchup.awayTeamId === userTeamId;
+
+  return (
+    <div className={cx(
+      'overflow-hidden rounded-card border bg-surface-raised',
+      involvesUser ? 'border-team' : 'border-line-subtle',
+      size === 'lg' ? 'w-64' : 'w-full',
+    )}>
+      <MatchupSide team={away} score={matchup.awayScore} played={matchup.played}
+                   won={won(away?.id)} record={rec(away?.id)} seed={seedOf?.(away?.id)} size={size} />
+      <div className="mx-3 h-px bg-line-subtle" />
+      <MatchupSide team={home} score={matchup.homeScore} played={matchup.played}
+                   won={won(home?.id)} record={rec(home?.id)} seed={seedOf?.(home?.id)} size={size} />
+    </div>
+  );
+}
+
+function BracketColumn({ label, children }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <p className="mb-2 text-micro uppercase text-fg-faint">{label}</p>
+      {/* justify-around spaces later rounds between the games that feed them */}
+      <div className="flex flex-1 flex-col justify-around gap-3">{children}</div>
+    </div>
+  );
+}
+
+// ── One conference, flowing left to right toward the Super Bowl ─────────────
+// The old layout mirrored the NFC against the AFC, about 1,760px wide, so it
+// scrolled sideways on every laptop. Stacked rows fit.
+function ConferenceBracket({ name, data, userTeamId, standings }) {
+  const seedOf = (id) => {
+    const i = data.seeds?.indexOf(id);
+    return i >= 0 ? i + 1 : null;
+  };
+  const byeTeam = TEAMS.find(t => t.id === data.seeds?.[0]);
+
+  return (
+    <Card as="section" aria-label={`${name} bracket`}>
+      <CardHeader title={name} eyebrow="Conference bracket" />
+      <CardBody className="grid grid-cols-3 gap-4">
+        <BracketColumn label="Wild card">
+          {data.wc.map((m, i) => (
+            <Matchup key={i} matchup={m} userTeamId={userTeamId} standings={standings} seedOf={seedOf} />
+          ))}
+          {byeTeam && (
+            <div className="flex items-center gap-2 rounded-card border border-dashed border-line-subtle px-3 py-2">
+              <span className="w-3 text-micro tabular-nums text-fg-faint">1</span>
+              <TeamCrest team={byeTeam} size="xs" decorative />
+              <span className="flex-1 truncate text-label text-fg-secondary">{byeTeam.abbreviation}</span>
+              <Badge tone="warning">Bye</Badge>
+            </div>
+          )}
+        </BracketColumn>
+
+        <BracketColumn label="Divisional">
+          {(data.div.length ? data.div : [null, null]).map((m, i) => (
+            <Matchup key={i} matchup={m} userTeamId={userTeamId} standings={standings} seedOf={seedOf} />
+          ))}
+        </BracketColumn>
+
+        <BracketColumn label="Championship">
+          {(data.conf.length ? data.conf : [null]).map((m, i) => (
+            <Matchup key={i} matchup={m} userTeamId={userTeamId} standings={standings} seedOf={seedOf} />
+          ))}
+        </BracketColumn>
+      </CardBody>
+    </Card>
+  );
+}
 
 export default function Playoffs({ onBack, onStartOffseason }) {
-    const playoffBracket = useGameStore(state => state.playoffBracket);
-    const userTeamId = useGameStore(state => state.userTeamId);
-    const seasonRecap = useGameStore(state => state.seasonRecap);
-    const concludeSeason = useGameStore(state => state.concludeSeason);
-    const userTeam = TEAMS.find(t => t.id === userTeamId);
-    const theme = userTeam?.theme || {};
+  const playoffBracket = useGameStore(s => s.playoffBracket);
+  const standings = useGameStore(s => s.standings) || {};
+  const simPlayoffRound = useGameStore(s => s.simPlayoffRound);
+  const concludeSeason = useGameStore(s => s.concludeSeason);
+  const userTeamId = useGameStore(s => s.userTeamId);
+  const seasonRecap = useGameStore(s => s.seasonRecap);
 
-    const [simResult, setSimResult] = useState(null); // { match, winner }
-    const [showRecap, setShowRecap] = useState(false);
-    const [isSimulatingRound, setIsSimulatingRound] = useState(false);
+  const userTeam = TEAMS.find(t => t.id === userTeamId);
+  const [showRecap, setShowRecap] = useState(false);
+  // The round is simulated up front so the loading scoreboard shows the real
+  // results — it used to animate invented scores that contradicted the bracket.
+  const [roundRun, setRoundRun] = useState(null); // { games, scores, result, simAll, watch }
+  const simLoading = !!roundRun;
+  const simSpeed = usePreference('simSpeed');
 
-    // Initial round state to detect round changes
-    const [currentRound, setCurrentRound] = useState(playoffBracket?.round);
+  const playRound = (simAll, watch = false) => {
+    const before = useGameStore.getState().playoffBracket;
+    const games = getRoundGames(before);
+    const label = ROUND_NAMES[before?.round] || 'Playoffs';
+    const result = simPlayoffRound();
+    if (!result) return;
+    const b = useGameStore.getState().playoffBracket;
+    const all = [...b.afc.wc, ...b.nfc.wc, ...b.afc.div, ...b.nfc.div, ...b.afc.conf, ...b.nfc.conf, b.sb].filter(Boolean);
+    const played = games.map(g => all.find(m => m.id === g.id) || g);
+    setRoundRun({ games: played, scores: played.map(m => [m.awayScore, m.homeScore]), result, simAll, round: before.round, label, watch });
+  };
 
-    useEffect(() => {
-        if (playoffBracket?.round !== currentRound) {
-            setIsSimulatingRound(false); // Stop sim if round advanced
-            setCurrentRound(playoffBracket?.round);
-        }
-    }, [playoffBracket?.round, currentRound]);
-
-    useEffect(() => {
-        if (isSimulatingRound && !simResult && !showRecap) {
-            const timeout = setTimeout(() => {
-                handleSimNext();
-            }, 800); // Small delay between games
-            return () => clearTimeout(timeout);
-        }
-    }, [isSimulatingRound, simResult, showRecap]);
-
-    // Helper for text contrast (reusing logic)
-    const getContrastColor = (hexColor) => {
-        if (!hexColor) return '#ffffff';
-        const r = parseInt(hexColor.substr(1, 2), 16);
-        const g = parseInt(hexColor.substr(3, 2), 16);
-        const b = parseInt(hexColor.substr(5, 2), 16);
-        const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-        return (yiq >= 128) ? '#000000' : '#ffffff';
-    };
-
-    const handleSimNext = () => {
-        const result = useGameStore.getState().simulateNextPlayoffGame();
-
-        if (result) {
-            const { playedGame, seasonOver } = result;
-            // specific match result for popup
-            const home = TEAMS.find(t => t.id === playedGame.homeTeamId);
-            const away = TEAMS.find(t => t.id === playedGame.awayTeamId);
-            const winnerId = playedGame.homeScore > playedGame.awayScore ? home.id : away.id;
-
-            setSimResult({
-                game: playedGame,
-                home,
-                away,
-                winnerId
-            });
-
-            if (seasonOver) {
-                setIsSimulatingRound(false);
-                // Calculate awards immediately but show recap after popup closes
-                useGameStore.getState().concludeSeason();
-                setTimeout(() => {
-                    setSimResult(null);
-                    setShowRecap(true);
-                }, 3000);
-            } else {
-                // Auto close popup
-                setTimeout(() => setSimResult(null), 2000);
-            }
-        } else {
-            // No more games in this round?
-            setIsSimulatingRound(false);
-        }
-    };
-
-    const handleStartSimRound = () => {
-        setIsSimulatingRound(true);
-    };
-
-    if (!playoffBracket) {
-        return (
-            <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-paper">
-                <div className="retro-card p-8 text-center border-4 border-ink">
-                    <h1 className="text-3xl font-bold text-ink mb-4">Playoffs Not Started</h1>
-                    <Button onClick={onBack} variant="primary">Back</Button>
-                </div>
-            </div>
-        );
+  const handleSimRoundComplete = () => {
+    const run = roundRun;
+    setRoundRun(null);
+    if (!run) return;
+    if (run.result.seasonOver) {
+      concludeSeason();
+      setTimeout(() => setShowRecap(true), 400);
+    } else if (run.simAll && run.result.newRound <= 4) {
+      setTimeout(() => playRound(true), 600);
     }
+  };
 
-    const MatchupCard = ({ title, matchup, compact = false }) => {
-        if (!matchup) return <div className="h-20 w-48 bg-gray-200/50 rounded border-2 border-dashed border-gray-400 opacity-50"></div>;
-
-        const home = TEAMS.find(t => t.id === matchup.homeTeamId);
-        const away = TEAMS.find(t => t.id === matchup.awayTeamId);
-
-        const standings = useGameStore.getState().standings || {};
-        const getRecord = (id) => {
-            const s = standings[id];
-            if (!s) return '';
-            return `(${s.wins}-${s.losses})`;
-        };
-
-        const isWinner = (id) => matchup.played && matchup.winnerId === id;
-
-        // Ensure colors are strings
-        const homeColor = home?.theme?.primary || '#333333';
-        const awayColor = away?.theme?.primary || '#333333';
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-48 retro-card p-0 overflow-hidden border-2 mb-2 relative shadow-md transition-transform hover:scale-105 z-10"
-                style={{ borderColor: theme.ink }}
-            >
-                {/* Header */}
-                <div className="bg-ink text-paper text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider flex justify-between items-center">
-                    <span>{title}</span>
-                </div>
-
-                {/* Away Team */}
-                <div className={`flex justify-between items-center px-3 py-2 ${isWinner(away?.id) ? 'bg-yellow-100' : 'bg-white'}`}>
-                    <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-6 rounded-sm shadow-sm" style={{ backgroundColor: awayColor }}></div>
-                        <div className="flex flex-col leading-tight">
-                            <span className={`font-bold text-sm truncate ${isWinner(away?.id) ? 'text-ink' : 'text-gray-600'}`}>{away?.abbreviation || away?.location.substring(0, 3).toUpperCase()}</span>
-                            <span className="text-[9px] font-bold text-gray-400">{getRecord(away?.id)}</span>
-                        </div>
-                    </div>
-                    <span className={`font-black text-lg ${isWinner(away?.id) ? 'text-ink' : 'text-gray-400'}`}>{matchup.awayScore ?? ''}</span>
-                </div>
-
-                {/* Divider */}
-                <div className="h-px bg-gray-200 mx-2"></div>
-
-                {/* Home Team */}
-                <div className={`flex justify-between items-center px-3 py-2 ${isWinner(home?.id) ? 'bg-yellow-100' : 'bg-white'}`}>
-                    <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-6 rounded-sm shadow-sm" style={{ backgroundColor: homeColor }}></div>
-                        <div className="flex flex-col leading-tight">
-                            <span className={`font-bold text-sm truncate ${isWinner(home?.id) ? 'text-ink' : 'text-gray-600'}`}>{home?.abbreviation || home?.location.substring(0, 3).toUpperCase()}</span>
-                            <span className="text-[9px] font-bold text-gray-400">{getRecord(home?.id)}</span>
-                        </div>
-                    </div>
-                    <span className={`font-black text-lg ${isWinner(home?.id) ? 'text-ink' : 'text-gray-400'}`}>{matchup.homeScore ?? ''}</span>
-                </div>
-            </motion.div>
-        );
-    };
-
-    const ConferenceBracket = ({ name, data, align = 'left' }) => {
-        // Alignment logic: if 'left' (AFC), flow moves Right. if 'right' (NFC), flow moves Left.
-        // We handle this by flexible justification.
-
-        return (
-            <div className={`flex flex-col ${align === 'right' ? 'items-start' : 'items-end'}`}>
-                <h2 className={`text-4xl font-black text-ink uppercase italic mb-8 px-8 py-2 bg-yellow-400 border-4 border-ink rotate-[-2deg] shadow-retro text-center self-center`}>
-                    {name}
-                </h2>
-
-                <div className={`flex items-center gap-8 ${align === 'right' ? 'flex-row-reverse' : 'flex-row'}`}>
-
-                    {/* Wild Card Round */}
-                    <div className="flex flex-col gap-8 justify-center min-h-[500px]">
-                        <h3 className="text-gray-500 font-bold uppercase text-xs text-center mb-1 bg-white/80 rounded py-1 border border-gray-300">Wild Card</h3>
-                        <div className="flex flex-col gap-6">
-                            {data.wc.map((m, i) => <MatchupCard key={i} title={'Wild Card'} matchup={m} />)}
-                        </div>
-
-                        {/* Bye Box */}
-                        <div className="mt-4 flex flex-col items-center opacity-75">
-                            <div className="text-[10px] font-bold uppercase text-gray-500 mb-1">Top Seed Bye</div>
-                            <div className="bg-white border-2 border-dashed border-gray-400 px-4 py-2 rounded text-sm font-bold text-gray-700">
-                                {TEAMS.find(t => t.id === data.seeds[0])?.location}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Connector Lines would go here ideally */}
-
-                    {/* Div Round */}
-                    <div className="flex flex-col gap-16 justify-center min-h-[500px]">
-                        <h3 className="text-gray-500 font-bold uppercase text-xs text-center mb-1 bg-white/80 rounded py-1 border border-gray-300">Divisional</h3>
-                        <div className="flex flex-col gap-12">
-                            {data.div.length > 0 ? (
-                                data.div.map((m, i) => <MatchupCard key={i} title={'Divisional'} matchup={m} />)
-                            ) : (
-                                <>
-                                    <MatchupCard title="Divisional" />
-                                    <MatchupCard title="Divisional" />
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Conf Round */}
-                    <div className="flex flex-col gap-6 justify-center min-h-[500px]">
-                        <h3 className="text-gray-500 font-bold uppercase text-xs text-center mb-1 bg-white/80 rounded py-1 border border-gray-300">Conference</h3>
-                        <div className="flex flex-col justify-center h-full">
-                            {data.conf.length > 0 ? (
-                                data.conf.map((m, i) => <MatchupCard key={i} title={'Championship'} matchup={m} />)
-                            ) : (
-                                <MatchupCard title="Championship" />
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
+  if (!playoffBracket) {
     return (
-        <div
-            className="min-h-screen p-4 pt-8 bg-paper pattern-dots overflow-x-auto relative"
-            style={{ '--color-primary': theme.primary }}
-        >
-            {/* MATCHUP RESULT POPUP */}
-            <AnimatePresence>
-                {simResult && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-                        onClick={() => setSimResult(null)}
-                    >
-                        <div className="bg-white border-4 border-ink p-8 rounded-lg shadow-retro max-w-lg w-full text-center" onClick={e => e.stopPropagation()}>
-                            <h2 className="text-2xl font-black text-ink uppercase mb-6 border-b-2 border-gray-200 pb-2">Result</h2>
-                            <div className="flex justify-between items-center gap-8">
-                                <div className={`flex flex-col items-center gap-2 ${simResult.game.homeScore > simResult.game.awayScore ? 'scale-110' : 'opacity-75 grayscale'}`}>
-                                    <div className="w-16 h-16 rounded shadow-md" style={{ backgroundColor: simResult.home.theme.primary }}></div>
-                                    <span className="font-bold text-xl">{simResult.home.location}</span>
-                                    <span className="text-6xl font-black">{simResult.game.homeScore}</span>
-                                </div>
-                                <div className="text-4xl font-bold text-gray-300">VS</div>
-                                <div className={`flex flex-col items-center gap-2 ${simResult.game.awayScore > simResult.game.homeScore ? 'scale-110' : 'opacity-75 grayscale'}`}>
-                                    <div className="w-16 h-16 rounded shadow-md" style={{ backgroundColor: simResult.away.theme.primary }}></div>
-                                    <span className="font-bold text-xl">{simResult.away.location}</span>
-                                    <span className="text-6xl font-black">{simResult.game.awayScore}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* SEASON RECAP MODAL */}
-            <AnimatePresence>
-                {showRecap && seasonRecap && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md"
-                    >
-                        <div className="bg-paper border-4 border-ink p-8 rounded-lg shadow-retro max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                            <div className="text-center mb-8">
-                                <h1 className="text-6xl font-black text-ink italic drop-shadow-retro mb-2 text-yellow-500 outline-text">SEASON RECAP</h1>
-                                <p className="text-xl font-bold text-gray-500">Year {seasonRecap.year} Complete</p>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-8 mb-8">
-                                {/* Champion */}
-                                <div className="col-span-2 bg-yellow-100 border-4 border-ink p-6 rounded flex items-center justify-center gap-8 shadow-sm">
-                                    <div className="text-center">
-                                        <div className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-2">Super Bowl Champion</div>
-                                        <div className="text-5xl font-black text-ink">{seasonRecap.champion.location}</div>
-                                        <div className="text-2xl font-bold text-ink/70">{seasonRecap.champion.nickname}</div>
-                                    </div>
-                                    <div className="text-8xl">🏆</div>
-                                </div>
-
-                                {/* MVP */}
-                                <div className="retro-card p-6 border-2 border-ink bg-white">
-                                    <div className="text-xs font-bold uppercase bg-blue-100 text-blue-800 px-2 py-1 inline-block mb-2 rounded">League MVP</div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-gray-200 rounded-full border-2 border-gray-400"></div>
-                                        <div>
-                                            <div className="text-2xl font-black">{seasonRecap.awards.mvp?.name}</div>
-                                            <div className="text-sm font-bold text-gray-500">{seasonRecap.awards.mvp?.position} • {seasonRecap.awards.mvp?.teamLocation}</div>
-                                        </div>
-                                    </div>
-                                    {/* Quick Stats */}
-                                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold bg-gray-50 p-2 rounded">
-                                        {seasonRecap.awards.mvp.position === 'QB' && (
-                                            <>
-                                                <div>
-                                                    <div className="text-gray-400">YDS</div>
-                                                    <div>{seasonRecap.awards.mvp.stats.season.passingYards}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-gray-400">TD</div>
-                                                    <div>{seasonRecap.awards.mvp.stats.season.passingTDs}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-gray-400">INT</div>
-                                                    <div>{seasonRecap.awards.mvp.stats.season.interceptions}</div>
-                                                </div>
-                                            </>
-                                        )}
-                                        {/* Add logic for other positions if needed */}
-                                    </div>
-                                </div>
-
-                                {/* OPOY & DPOY Small Cards */}
-                                <div className="space-y-4">
-                                    <div className="retro-card p-4 border-2 border-ink bg-white flex justify-between items-center">
-                                        <div>
-                                            <div className="text-[10px] font-bold uppercase text-gray-500">Offensive Player of the Year</div>
-                                            <div className="font-black text-lg">{seasonRecap.awards.opoy?.name}</div>
-                                            <div className="text-xs text-gray-500">{seasonRecap.awards.opoy?.position} • {seasonRecap.awards.opoy?.teamLocation}</div>
-                                        </div>
-                                        <div className="text-2xl">🏈</div>
-                                    </div>
-
-                                    <div className="retro-card p-4 border-2 border-ink bg-white flex justify-between items-center">
-                                        <div>
-                                            <div className="text-[10px] font-bold uppercase text-gray-500">Defensive Player of the Year</div>
-                                            <div className="font-black text-lg">{seasonRecap.awards.dpoy?.name}</div>
-                                            <div className="text-xs text-gray-500">{seasonRecap.awards.dpoy?.position} • {seasonRecap.awards.dpoy?.teamLocation}</div>
-                                        </div>
-                                        <div className="text-2xl">🛡️</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-center">
-                                <Button
-                                    className="px-8 py-4 text-xl bg-ink text-white hover:bg-gray-800"
-                                    onClick={() => {
-                                        setShowRecap(false);
-                                        if (onStartOffseason) onStartOffseason();
-                                    }}
-                                >
-                                    Start Offseason
-                                </Button>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            <div className="min-w-[1400px] mx-auto">
-                {/* Header */}
-                <div className="flex justify-between items-start mb-8 relative z-50">
-                    <Button
-                        onClick={onBack}
-                        className="text-lg px-6 py-2 border-2"
-                        style={{
-                            background: theme.secondary,
-                            borderColor: theme.accent,
-                            color: getContrastColor(theme.secondary)
-                        }}
-                    >
-                        ← Hub
-                    </Button>
-
-                    <div className="text-center absolute left-1/2 transform -translate-x-1/2 top-0">
-                        <h1 className="text-7xl font-black text-ink italic drop-shadow-retro outline-text text-white" style={{ textShadow: `4px 4px 0px ${theme.primary}` }}>
-                            PLAYOFFS
-                        </h1>
-                        <div className="text-xl font-bold bg-white border-2 border-ink inline-block px-4 py-1 -mt-2 transform rotate-2 shadow-sm">
-                            Road to the Super Bowl
-                        </div>
-                    </div>
-
-                    <Button
-                        onClick={handleStartSimRound}
-                        disabled={isSimulatingRound}
-                        className="text-lg px-6 py-2 border-2 animate-pulse hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                            background: '#22c55e', // Green
-                            borderColor: theme.accent,
-                            color: '#000'
-                        }}
-                    >
-                        {isSimulatingRound ? 'Simulating...' : 'Sim Round'}
-                    </Button>
-                </div>
-
-                {/* Main Tournament Grid */}
-                <div className="flex justify-center items-stretch gap-8">
-                    {/* LEFT SIDE - AFC (Align Left means flowing to the right) */}
-                    {/* Wait, if AFC is on Left, we want flow: WC -> Div -> Conf -> Center. */}
-                    {/* My ConferenceBracket logic: 'flex-row' means WC Left, Conf Right. Matches Left side of screen. */}
-                    <div className="flex-1 flex justify-end">
-                        <ConferenceBracket name="AFC" data={playoffBracket.afc} align="left" />
-                    </div>
-
-                    {/* CENTER - SUPER BOWL */}
-                    <div className="flex flex-col items-center justify-center gap-8 w-64 z-10">
-                        {/* Trophy Icon or something? */}
-                        <div className="w-px h-full bg-gray-300 absolute top-32 bottom-0 z-0"></div>
-                        <div className="bg-white border-4 border-ink p-4 rounded-full z-10 shadow-retro mb-4">
-                            <div className="text-4xl">🏆</div>
-                        </div>
-
-                        <div className="scale-125 z-10">
-                            <h3 className="text-ink font-black uppercase text-sm text-center mb-2 bg-yellow-400 border-2 border-ink px-2 py-1 transform -rotate-2">Super Bowl</h3>
-                            {playoffBracket.sb ? (
-                                <MatchupCard title="Super Bowl" matchup={playoffBracket.sb} />
-                            ) : (
-                                <div className="w-56 h-32 retro-card flex flex-col items-center justify-center border-4 border-ink bg-gray-100">
-                                    <span className="font-bold text-gray-500 text-2xl font-heading opacity-50">TBD</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* RIGHT SIDE - NFC (Align Right means flowing to the left) */}
-                    {/* ConferenceBracket logic: 'flex-row-reverse' means WC Right, Conf Left. Matches Right side of screen. */}
-                    <div className="flex-1 flex justify-start">
-                        <ConferenceBracket name="NFC" data={playoffBracket.nfc} align="right" />
-                    </div>
-                </div>
-            </div>
-        </div>
+      <div className="grid min-h-screen place-items-center bg-surface-base p-6">
+        <Card className="max-w-md">
+          <EmptyState
+            icon="🏆"
+            title="The playoffs haven't started"
+            body="Finish the regular season to set the bracket."
+            action="Back to hub"
+            onAction={onBack}
+          />
+        </Card>
+      </div>
     );
+  }
+
+  const round = playoffBracket.round;
+  const roundLabel = round <= 4 ? ROUND_NAMES[round] : 'Complete';
+  const isComplete = round > 4 || (round === 4 && playoffBracket.sb?.played);
+  const currentGames = getRoundGames(playoffBracket);
+  const userAlive = currentGames.some(g =>
+    (g.homeTeamId === userTeamId || g.awayTeamId === userTeamId) && (!g.played || g.winnerId === userTeamId));
+  const userInRound = currentGames.some(g => !g.played && (g.homeTeamId === userTeamId || g.awayTeamId === userTeamId));
+  const watchGame = roundRun?.watch && SIM_SPEEDS[simSpeed]
+    ? roundRun.games.find(g => (g.homeTeamId === userTeamId || g.awayTeamId === userTeamId) && g.pbp) : null;
+
+  return (
+    <div className="flex min-h-screen flex-col bg-surface-shell">
+      {/* ── Immersive header: slim back bar, not a vanished nav ── */}
+      <header className="shrink-0 border-b border-line-subtle bg-surface-base">
+        <div className="mx-auto flex max-w-content items-center gap-4 px-6 py-4">
+          <Button variant="ghost" size="sm" onClick={onBack}>← Hub</Button>
+          <div className="min-w-0 flex-1">
+            <p className="text-micro uppercase text-fg-muted">Postseason</p>
+            <h1 className="font-display text-h1 uppercase text-fg">{roundLabel}</h1>
+          </div>
+          {userAlive && <Badge tone="team">{userTeam?.abbreviation} still alive</Badge>}
+          {!isComplete && (
+            <div className="flex items-center gap-2">
+              {userInRound && (
+                <Button variant="primary" size="lg" icon={<IconArrowRight size={16} />} onClick={() => playRound(false, true)}>
+                  Watch our game
+                </Button>
+              )}
+              <Button
+                variant={userInRound ? 'secondary' : 'primary'} size="lg"
+                icon={userInRound ? undefined : <IconArrowRight size={16} />}
+                onClick={() => playRound(false)}
+              >
+                {userInRound ? 'Sim all games' : `Play ${roundLabel}`}
+              </Button>
+              <Button
+                variant="ghost" size="sm"
+                icon={<IconFastForward size={14} />}
+                onClick={() => playRound(true)}
+              >
+                Sim to the end
+              </Button>
+            </div>
+          )}
+          {isComplete && (
+            <Button variant="primary" size="lg" iconRight={<IconArrowRight size={16} />}
+                    onClick={() => setShowRecap(true)}>
+              Season recap
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {/* ── Bracket ── */}
+      <div className="flex-1 px-6 py-6">
+        <div className="mx-auto grid max-w-content grid-cols-1 items-center gap-4 xl:grid-cols-[1fr_300px]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <ConferenceBracket name="AFC" data={playoffBracket.afc} userTeamId={userTeamId} standings={standings} />
+            <ConferenceBracket name="NFC" data={playoffBracket.nfc} userTeamId={userTeamId} standings={standings} />
+          </div>
+
+          {/* Super Bowl, centred between the two conference rows */}
+          <Card className="flex flex-col items-center gap-3 px-4 py-6 text-center" elevation={2}>
+            <span className="text-display" aria-hidden="true">🏆</span>
+            <p className="font-display text-h2 uppercase text-fg">Super Bowl</p>
+            <Matchup
+              matchup={playoffBracket.sb}
+              userTeamId={userTeamId}
+              standings={standings}
+              size="lg"
+            />
+            {playoffBracket.sb?.played && (
+              <Badge tone="warning">
+                {TEAMS.find(t => t.id === playoffBracket.sb.winnerId)?.name} win
+              </Badge>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* ── Round simulation ── */}
+      <AnimatePresence>
+        {simLoading && watchGame && (
+          <GameBroadcast
+            game={watchGame}
+            title={roundRun.label}
+            others={roundRun.games.map((g, i) => ({ g, final: roundRun.scores[i] })).filter(({ g }) => g !== watchGame)}
+            duration={SIM_SPEEDS[simSpeed].broadcast}
+            onComplete={handleSimRoundComplete}
+          />
+        )}
+        {simLoading && !watchGame && (
+          <WeekLoadingScreen
+            week={roundRun.round}
+            labelOverride={roundRun.label}
+            theme={userTeam?.theme}
+            onComplete={handleSimRoundComplete}
+            games={roundRun.games}
+            realScores={roundRun.scores}
+            teamRatings={useGameStore.getState().teamRatings}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Season recap ── */}
+      <Modal
+        open={showRecap && !!seasonRecap}
+        onClose={() => setShowRecap(false)}
+        size="lg"
+        eyebrow={`${seasonRecap?.year ?? ''} season`}
+        title="Season complete"
+        footer={
+          <Button
+            variant="primary" size="lg" fullWidth
+            iconRight={<IconArrowRight size={16} />}
+            onClick={() => { setShowRecap(false); onStartOffseason?.(); }}
+          >
+            Begin the offseason
+          </Button>
+        }
+      >
+        {seasonRecap && (
+          <div className="flex flex-col gap-5">
+            <div
+              className="flex flex-col items-center gap-3 rounded-panel px-6 py-8 text-center"
+              style={{ background: 'linear-gradient(160deg, var(--rarity-gold-wash), transparent 70%)' }}
+            >
+              <span className="text-display" aria-hidden="true">🏆</span>
+              <p className="text-micro uppercase text-fg-muted">Champions</p>
+              <p className="font-display text-display uppercase text-fg">
+                {seasonRecap.champion?.location} {seasonRecap.champion?.name}
+              </p>
+              {seasonRecap.champion?.id === userTeamId && (
+                <Badge tone="warning">That is your franchise</Badge>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'League MVP', player: seasonRecap.awards?.mvp },
+                { label: 'Offensive POY', player: seasonRecap.awards?.opoy },
+                { label: 'Defensive POY', player: seasonRecap.awards?.dpoy },
+              ].map(({ label, player }) => (
+                <div key={label} className="rounded-card border border-line-subtle px-4 py-3 text-center">
+                  <p className="mb-1 text-micro uppercase text-fg-faint">{label}</p>
+                  <p className="truncate text-h3 text-fg">{player?.name ?? '—'}</p>
+                  <p className="truncate text-label text-fg-muted">
+                    {player?.position}{player?.teamLocation ? ` · ${player.teamLocation}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
 }

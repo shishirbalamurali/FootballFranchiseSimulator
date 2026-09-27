@@ -1,0 +1,162 @@
+{
+  "date": "2026-09-20",
+  "quotaModel": "5 MiB UTF-8 payload cap per setItem; controlled failure model, not browser quota measurement",
+  "onFieldPresent": false,
+  "tradeDeadline": {
+    "displayed": 11,
+    "weeks": [
+      {
+        "week": 9,
+        "rejected": false,
+        "moved": true
+      },
+      {
+        "week": 10,
+        "rejected": true,
+        "moved": false
+      },
+      {
+        "week": 11,
+        "rejected": true,
+        "moved": false
+      }
+    ]
+  },
+  "injuredQBPassAttempts": 44,
+  "minimumExtension": {
+    "salary": 1,
+    "years": 6,
+    "yearsLeft": 6
+  },
+  "saveProgress": [
+    {
+      "afterGameWeek": 1,
+      "memoryWeek": 2,
+      "memoryPhase": "regular",
+      "savedWeek": 2,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 2,
+      "memoryWeek": 3,
+      "memoryPhase": "regular",
+      "savedWeek": 3,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 3,
+      "memoryWeek": 4,
+      "memoryPhase": "regular",
+      "savedWeek": 4,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 4,
+      "memoryWeek": 5,
+      "memoryPhase": "regular",
+      "savedWeek": 5,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 5,
+      "memoryWeek": 6,
+      "memoryPhase": "regular",
+      "savedWeek": 6,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 6,
+      "memoryWeek": 7,
+      "memoryPhase": "regular",
+      "savedWeek": 7,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 7,
+      "memoryWeek": 8,
+      "memoryPhase": "regular",
+      "savedWeek": 8,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 8,
+      "memoryWeek": 9,
+      "memoryPhase": "regular",
+      "savedWeek": 9,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 9,
+      "memoryWeek": 10,
+      "memoryPhase": "regular",
+      "savedWeek": 10,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 10,
+      "memoryWeek": 11,
+      "memoryPhase": "regular",
+      "savedWeek": 11,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 11,
+      "memoryWeek": 12,
+      "memoryPhase": "regular",
+      "savedWeek": 12,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 12,
+      "memoryWeek": 13,
+      "memoryPhase": "regular",
+      "savedWeek": 13,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 13,
+      "memoryWeek": 14,
+      "memoryPhase": "regular",
+      "savedWeek": 14,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 14,
+      "memoryWeek": 15,
+      "memoryPhase": "regular",
+      "savedWeek": 15,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 15,
+      "memoryWeek": 16,
+      "memoryPhase": "regular",
+      "savedWeek": 16,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 16,
+      "memoryWeek": 17,
+      "memoryPhase": "regular",
+      "savedWeek": 17,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 17,
+      "memoryWeek": 18,
+      "memoryPhase": "regular",
+      "savedWeek": 18,
+      "savedPhase": "regular"
+    },
+    {
+      "afterGameWeek": 18,
+      "memoryWeek": 1,
+      "memoryPhase": "playoffs",
+      "savedWeek": 1,
+      "savedPhase": "playoffs"
+    }
+  ],
+  "saveFailureCount": 0,
+  "trimWarnings": [],
+  "lastErrors": []
+}

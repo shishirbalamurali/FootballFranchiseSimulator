@@ -1,93 +1,290 @@
+@import url('https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700&family=Bangers&family=Lilita+One&family=Changa+One:ital@0;1&family=Passion+One:wght@700;900&family=Big+Shoulders+Display:wght@800;900&family=Staatliches&family=Racing+Sans+One&family=Titan+One&family=Squada+One&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&display=swap');
+
+/* Design tokens — the single source of truth. See src/styles/tokens.css. */
+@import './styles/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* RETRO CARTOON DESIGN SYSTEM */
-:root {
-  --color-ink: #1a1a2e;
-  --color-paper: #faf8f0;
-  --color-cream: #f5f0e1;
-  --color-border: #1a1a2e;
-  --radius-retro: 0.75rem;
-  --shadow-retro: 4px 4px 0px rgba(26, 26, 46, 0.25);
-  --shadow-retro-lg: 6px 6px 0px rgba(26, 26, 46, 0.3);
-}
+/* ============================================================================
+   CARTOON RETRO SHELL
+   Paper stock + team wallpaper pattern + a whisper of print grain. Every
+   colour comes from tokens that ThemeProvider rewrites per franchise.
+   ============================================================================ */
 
 @layer base {
+  html { background: var(--surface-shell); }
+
   body {
-    @apply font-sans text-ink overflow-x-hidden;
-    background-color: var(--color-paper);
-    color: var(--color-ink);
+    @apply overflow-x-hidden;
+    font-family: var(--font-body);
+    background-color: var(--surface-shell);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color var(--dur-slow) var(--ease-out), color var(--dur-slow) var(--ease-out);
   }
+
+  /* Team wallpaper — the pattern tile at low strength, fixed behind content */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--pattern-image);
+    background-size: var(--pattern-size);
+    opacity: var(--pattern-alpha);
+  }
+
+  /* Print grain + vignette — makes flat fills read as ink on paper */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse at 50% 40%, transparent 55%, color-mix(in srgb, var(--ink) 12%, transparent) 100%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.16;
+    mix-blend-mode: multiply;
+  }
+  html[data-mode='night'] body::after { mix-blend-mode: overlay; opacity: 0.22; }
+
+  #root { position: relative; z-index: 1; }
+
+  * { box-sizing: border-box; }
+
+  input, select, textarea, button { font: inherit; color: inherit; }
+  ::placeholder { color: var(--text-faint); }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-synthesis: none;
+    letter-spacing: var(--display-tracking);
+  }
+
+  /* Native form controls get the toon treatment too */
+  select, input[type='text'], input[type='number'], input[type='search'], textarea {
+    background-color: var(--surface-raised);
+    border: var(--stroke) solid var(--ink);
+    border-radius: var(--radius-sm);
+  }
+  input[type='range'] { accent-color: var(--team-primary); }
+  input[type='checkbox'] { accent-color: var(--team-primary); }
 }
 
+/* ============================================================================
+   COMPONENT PRIMITIVES
+   ============================================================================ */
 @layer components {
-  /* Core card */
+  /* Hard-shadow press — lifts on hover, squashes flat on press */
+  .toon-press {
+    transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), filter var(--dur-micro) var(--ease-out), background-color var(--dur-micro);
+  }
+  .toon-press:hover:not(:disabled) { transform: translate(-1px, -1px); }
+  .toon-press:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: var(--elev-press); }
+
+  /* Lift for clickable cards */
+  .toon-lift {
+    transition: transform var(--dur-base) var(--ease-bounce), box-shadow var(--dur-base) var(--ease-out);
+  }
+  .toon-lift:hover { transform: translate(-2px, -2px) rotate(-0.3deg); box-shadow: var(--elev-2); }
+  .toon-lift:active { transform: translate(2px, 2px); box-shadow: var(--elev-press); }
+
+  /* Outline-only (no drop) — chips, wells, avatars */
+  .toon-outline { box-shadow: 0 0 0 var(--stroke) var(--ink); }
+
+  /* Team banner stock with the pattern knocked in over it */
+  .toon-banner {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--banner-bg);
+    color: var(--banner-fg);
+  }
+  .toon-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: var(--banner-pattern-image);
+    background-size: var(--banner-pattern-size);
+    opacity: 0.13;
+  }
+  /* Text tokens re-pointed for content sitting on banner stock… */
+  .banner-scope {
+    --text-primary: var(--banner-fg);
+    --text-secondary: color-mix(in srgb, var(--banner-fg) 88%, var(--banner-bg));
+    --text-muted: color-mix(in srgb, var(--banner-fg) 78%, var(--banner-bg));
+    --text-faint: color-mix(in srgb, var(--banner-fg) 70%, var(--banner-bg));
+  }
+  /* …and restored for paper plates placed back on top of it. */
+  .paper-scope {
+    --text-primary: var(--paper-text-primary);
+    --text-secondary: var(--paper-text-secondary);
+    --text-muted: var(--paper-text-muted);
+    --text-faint: var(--paper-text-faint);
+  }
+
+  /* Sun-ray burst behind a hero element */
+  .toon-rays {
+    background: repeating-conic-gradient(from 0deg at 50% 50%,
+      color-mix(in srgb, currentColor 9%, transparent) 0deg 9deg,
+      transparent 9deg 18deg);
+  }
+
+  /* Cartoon lettering — fat outline painted behind the fill + hard drop */
+  .toon-title {
+    font-family: var(--font-display);
+    letter-spacing: var(--display-tracking);
+    -webkit-text-stroke: 0.14em var(--ink);
+    paint-order: stroke fill;
+    text-shadow: 0.06em 0.07em 0 var(--ink);
+  }
+  .toon-title-sm {
+    -webkit-text-stroke: 0.1em var(--ink);
+    paint-order: stroke fill;
+    text-shadow: 0.05em 0.06em 0 var(--ink);
+  }
+
+  /* Halftone wash — for heroes and empty wells */
+  .toon-halftone {
+    background-image: radial-gradient(color-mix(in srgb, currentColor 16%, transparent) 1.3px, transparent 1.6px);
+    background-size: 9px 9px;
+  }
+
+  /* Sticker label: tilted, outlined, on accent */
+  .toon-sticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--team-accent);
+    color: var(--team-on-accent);
+    box-shadow: 0 0 0 2px var(--ink), 2px 2px 0 2px var(--ink);
+    font-family: var(--font-display);
+    letter-spacing: var(--display-tracking);
+    transform: rotate(-2deg);
+  }
+
+  /* Candy-stripe fill for meters */
+  .toon-stripes {
+    background-image: repeating-linear-gradient(-45deg,
+      rgba(255, 255, 255, 0.22) 0 7px, transparent 7px 14px);
+    background-size: 28px 100%;
+  }
+
+  /* Pennant — a flag-shaped clip for eyebrows */
+  .toon-pennant { clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%); padding-right: 18px; }
+
+  /* Legacy — kept until the last callers are migrated */
   .retro-card {
-    @apply relative rounded-xl bg-white;
-    border: 3px solid var(--color-ink);
-    box-shadow: var(--shadow-retro);
-  }
-
-  /* Pill-style badges */
-  .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider;
-    background: var(--color-cream);
-    color: var(--color-ink);
-  }
-
-  /* Tab buttons */
-  .retro-tab {
-    @apply px-6 py-2 rounded-lg font-bold text-sm uppercase tracking-wider transition-all;
-    border: 2px solid var(--color-ink);
-    background: var(--color-cream);
-    color: var(--color-ink);
-  }
-
-  .retro-tab:hover {
-    @apply scale-105;
-    box-shadow: var(--shadow-retro);
-  }
-
-  /* Primary action button */
-  .btn-retro {
-    @apply px-6 py-3 rounded-xl font-bold uppercase tracking-wider text-sm transition-all;
-    border: 3px solid var(--color-ink);
-    box-shadow: var(--shadow-retro);
-    background: var(--color-ink);
-    color: var(--color-paper);
-  }
-
-  .btn-retro:hover {
-    @apply -translate-y-0.5;
-    box-shadow: var(--shadow-retro-lg);
-  }
-
-  .btn-retro:active {
-    @apply translate-y-0;
-    box-shadow: 2px 2px 0px rgba(26, 26, 46, 0.25);
+    @apply relative rounded-panel bg-surface-raised shadow-1;
   }
 }
 
-/* Utility text colors */
-.text-ink {
-  color: var(--color-ink);
+/* ============================================================================
+   UTILITIES
+   ============================================================================ */
+.eyebrow {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: .08em;
+  font-weight: 700;
+  color: var(--text-faint);
 }
 
-.bg-paper {
-  background-color: var(--color-paper);
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Chunky retro scrollbars */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text-primary) 35%, transparent) transparent; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--team-primary); }
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee { display: flex; animation: marquee 30s linear infinite; width: max-content; }
+
+/* ── Focus & selection ─────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 3px solid var(--team-accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+::selection { background: var(--team-accent); color: var(--team-on-accent); }
+
+button:disabled { cursor: not-allowed; }
+
+/* ── Draft-night chrome ────────────────────────────────────────────────── */
+.draft-trade-desk {
+  padding: var(--space-3) var(--space-6);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border-top: var(--stroke-lg) solid var(--ink);
+  flex-shrink: 0;
+  max-height: 45vh;
+  overflow: auto;
+}
+.draft-action {
+  background: var(--team-accent);
+  color: var(--team-on-accent);
+  padding: 9px var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: var(--elev-1);
+}
+.pick-chip {
+  border: 2px solid var(--border-default);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.pick-chip.selected {
+  background: var(--team-accent);
+  color: var(--team-on-accent);
+  border-color: var(--ink);
+}
+.college-resume {
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border-bottom: 2px solid var(--border-subtle);
+}
+.college-resume h3 { font-size: 24px; color: var(--text-primary); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Modal backdrop — ink wash with a halftone screen */
+.toon-backdrop {
+  background-color: color-mix(in srgb, var(--ink) 62%, transparent);
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 55%, transparent) 1.2px, transparent 1.5px);
+  background-size: 7px 7px;
 }
 
-.bg-cream {
-  background-color: var(--color-cream);
-}
-
-/* Scrollbar Hide */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* Nav bar sits on dark ink stock in every mode */
+.nav-scope {
+  color: var(--nav-fg);
+  --text-primary: var(--nav-fg);
+  --text-secondary: color-mix(in srgb, var(--nav-fg) 85%, var(--nav-bg));
+  --text-muted: color-mix(in srgb, var(--nav-fg) 72%, var(--nav-bg));
+  --text-faint: color-mix(in srgb, var(--nav-fg) 60%, var(--nav-bg));
+  --border-default: color-mix(in srgb, var(--nav-fg) 22%, transparent);
+  --border-subtle: color-mix(in srgb, var(--nav-fg) 12%, transparent);
+  --surface-hover: color-mix(in srgb, var(--nav-fg) 9%, transparent);
+  --ink: #050407;
 }

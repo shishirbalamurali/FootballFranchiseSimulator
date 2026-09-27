@@ -1,0 +1,174 @@
+{
+  "injuryAvailability": {
+    "name": "Caleb Floyd",
+    "injuryRemaining": 7,
+    "attempts": 26
+  },
+  "qbSelection": {
+    "weakAttempts": 0,
+    "strongAttempts": 37
+  },
+  "storyBoost": {
+    "scores": [
+      {
+        "boost": "none",
+        "score": [
+          15,
+          19
+        ]
+      },
+      {
+        "boost": "team_ovr",
+        "score": [
+          15,
+          19
+        ]
+      },
+      {
+        "boost": "win_prob",
+        "score": [
+          15,
+          19
+        ]
+      }
+    ],
+    "identicalStats": true
+  },
+  "fullSeasonSave": {
+    "utf8Bytes": 4490434,
+    "scheduleBytes": 3355596
+  },
+  "tiedPlayoff": {
+    "seed": 12,
+    "id": "nfc-wc-2",
+    "homeTeamId": "lions",
+    "awayTeamId": "bucs",
+    "homeScore": 30,
+    "awayScore": 30,
+    "winnerId": "bucs",
+    "played": true
+  },
+  "divisionSeeding": {
+    "afc": [
+      {
+        "id": "ravens",
+        "division": "North"
+      },
+      {
+        "id": "bengals",
+        "division": "North"
+      },
+      {
+        "id": "browns",
+        "division": "North"
+      },
+      {
+        "id": "steelers",
+        "division": "North"
+      },
+      {
+        "id": "bills",
+        "division": "East"
+      },
+      {
+        "id": "dolphins",
+        "division": "East"
+      },
+      {
+        "id": "patriots",
+        "division": "East"
+      }
+    ],
+    "southPresent": false
+  },
+  "championDraftSlot": 1,
+  "playEngine": {
+    "skipped": "On-field engine removed from current working tree"
+  },
+  "progressionAttribute": 111,
+  "draftTalent": [
+    {
+      "over90": 0,
+      "over80": 3,
+      "top": 82,
+      "max": 82
+    },
+    {
+      "over90": 0,
+      "over80": 5,
+      "top": 83,
+      "max": 83
+    },
+    {
+      "over90": 0,
+      "over80": 3,
+      "top": 80,
+      "max": 80
+    },
+    {
+      "over90": 0,
+      "over80": 2,
+      "top": 81,
+      "max": 81
+    },
+    {
+      "over90": 0,
+      "over80": 1,
+      "top": 79,
+      "max": 80
+    },
+    {
+      "over90": 0,
+      "over80": 2,
+      "top": 83,
+      "max": 83
+    },
+    {
+      "over90": 0,
+      "over80": 1,
+      "top": 77,
+      "max": 80
+    },
+    {
+      "over90": 0,
+      "over80": 0,
+      "top": 78,
+      "max": 79
+    },
+    {
+      "over90": 0,
+      "over80": 0,
+      "top": 78,
+      "max": 78
+    },
+    {
+      "over90": 0,
+      "over80": 3,
+      "top": 80,
+      "max": 82
+    }
+  ],
+  "depthShortage": {
+    "note": "See ratings probe in results.json; no enforceable depth editing found in Roster.jsx"
+  },
+  "tradeDeadline": {
+    "uiDeadline": 11,
+    "attempts": [
+      {
+        "week": 9,
+        "rejected": false,
+        "pickMoved": true
+      },
+      {
+        "week": 10,
+        "rejected": true,
+        "pickMoved": false
+      },
+      {
+        "week": 11,
+        "rejected": true,
+        "pickMoved": false
+      }
+    ]
+  }
+}

@@ -1,58 +1,59 @@
-import React, { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
-import { AnimatePresence } from 'framer-motion';
+import { TEAMS } from '../data/teams';
+import { TeamCrest, Badge } from './ui';
 
-export default function LeagueNewsPanel({ onNavigate }) {
-    const weeklyNews = useGameStore(state => state.weeklyNews) || [];
-    const [selectedPlayer, setSelectedPlayer] = useState(null);
+// 13 headline types collapsed onto four semantic tones instead of 13
+// hand-picked background/foreground hex pairs.
+const NEWS_TONE = {
+  STREAK:        { label: 'Streak',       tone: 'warning'  },
+  PERFECT:       { label: 'Undefeated',   tone: 'warning'  },
+  HIGH_SCORE:    { label: 'Explosion',    tone: 'warning'  },
+  COMEBACK:      { label: 'Comeback',     tone: 'positive' },
+  DIVISION_LEAD: { label: 'Division',     tone: 'info'     },
+  PLAYOFF:       { label: 'Playoffs',     tone: 'info'     },
+  GENERIC:       { label: 'League',       tone: 'neutral'  },
+  INJURY:        { label: 'Injury',       tone: 'negative' },
+  DEV_UPGRADE:   { label: 'Development',  tone: 'positive' },
+  FA_SIGNING:    { label: 'Free agency',  tone: 'info'     },
+  RETIREMENT:    { label: 'Retirement',   tone: 'neutral'  },
+  BREAKOUT:      { label: 'Breakout',     tone: 'positive' },
+  QB_WEEK:       { label: 'Air attack',   tone: 'warning'  },
+};
 
-    // Fallback if no news (Start of game)
-    const newsItems = weeklyNews.length > 0 ? weeklyNews : [
-        {
-            title: 'Season Kickoff',
-            headline: 'The Road to Glory Begins',
-            subtext: 'Who will rise to the top this season?',
-            type: 'GENERIC'
-        }
-    ];
+const SEED_ITEM = {
+  headline: 'The road to glory begins',
+  subtext: 'Who rises to the top this season? Play your first week to find out.',
+  type: 'GENERIC',
+};
 
-    return (
-        <div className="flex flex-col h-full relative">
-            {/* News Feed - Scrollable */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
-                {newsItems.map((item, idx) => (
-                    <div
-                        key={idx}
-                        className="p-4 border-b border-white/10 last:border-0 hover:bg-white/5 transition-colors group"
-                    >
-                        <div className="flex justify-between items-start mb-1">
-                            <span
-                                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded
-                                ${item.type === 'GAME_OF_WEEK' ? 'bg-blue-500/20 text-blue-300' :
-                                        item.type === 'PLAYER_WEEK' ? 'bg-amber-500/20 text-amber-300' :
-                                            'bg-white/10 text-gray-400'}`}
-                            >
-                                {item.title}
-                            </span>
-                        </div>
-                        <h3 className="font-bold text-white text-sm leading-snug mb-1 group-hover:text-glow transition-all">{item.headline}</h3>
-                        <p className="text-xs text-gray-400 leading-relaxed max-w-[90%]">
-                            {item.subtext}
-                        </p>
-                    </div>
-                ))}
+export default function LeagueNewsPanel() {
+  const weeklyNews = useGameStore(s => s.weeklyNews) || [];
+  const items = weeklyNews.length ? weeklyNews : [SEED_ITEM];
+
+  return (
+    <ul>
+      {items.map((item, idx) => {
+        const meta = NEWS_TONE[item.type] || NEWS_TONE.GENERIC;
+        const team = item.teamId ? TEAMS.find(t => t.id === item.teamId) : null;
+        return (
+          <li
+            key={idx}
+            className="flex gap-3 border-b border-line-subtle px-4 py-3 last:border-0"
+            style={team ? { boxShadow: `inset 3px 0 0 ${team.theme?.primary}` } : undefined}
+          >
+            {team
+              ? <TeamCrest team={team} size="sm" decorative className="mt-0.5" />
+              : <span className="mt-0.5 text-h3" aria-hidden="true">{item.icon ?? '🏈'}</span>}
+            <div className="min-w-0 flex-1">
+              <Badge tone={meta.tone} className="mb-1.5">{meta.label}</Badge>
+              <p className="text-label font-semibold leading-snug text-fg">{item.headline}</p>
+              {item.subtext && (
+                <p className="mt-0.5 text-label leading-relaxed text-fg-muted">{item.subtext}</p>
+              )}
             </div>
-
-            {/* Footer Action */}
-            <div className="p-4 bg-white/5 border-t border-white/10 shrink-0">
-                <button
-                    onClick={() => onNavigate('awards')}
-                    className="w-full py-3 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold uppercase tracking-widest transition-all"
-                >
-                    View Season Awards
-                </button>
-            </div>
-
-        </div>
-    );
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
