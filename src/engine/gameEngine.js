@@ -129,6 +129,7 @@ function normalizePlan(plan) {
         deepShots: clamp(Number(plan.deepShots) || 0, -0.1, 0.12),
         clockControl: clamp(Number(plan.clockControl) || 0, 0, 1),
         label: plan.label || null,
+        focusId: plan.focusId || null,
     };
 }
 
@@ -361,7 +362,7 @@ export function playGame(home, away, opts = {}) {
     const offense = [0, 1].map(i => buildOffense(teams[i], teams[1 - i], i === 0 ? 3 : 0, weather, plans[i], form[i].off - form[1 - i].def + (i === 0 ? HOME_EDGE : 0)));
     const defense = [0, 1].map(i => buildDefense(teams[i]));
     // X-Factors: one-of-a-kind abilities that switch on during the game.
-    const xf = createXFactorGame(teams, { playoff: !allowTie });
+    const xf = createXFactorGame(teams, { playoff: !allowTie, focus: [plans[0].focusId, plans[1].focusId] });
     let tdInfo = {};
     const drive = { side: -1, plays: 0, sacked: false, scored: false };
 

@@ -12,6 +12,7 @@
 
 import { PLAYBOOK_MAP, TEAM_PLAYBOOK_MAP } from '../data/playbooks.js';
 import { weeklyStrategy } from './weeklyExperience.js';
+import { OFFENSE_SCHEMES } from './schemes.js'; // CLAUDE: coordinator schemes
 
 // League-average (passingBoost − rushingBoost) across the 32 schemes, so the
 // tilt moves teams relative to each other without moving league volume.
@@ -30,19 +31,34 @@ function schemeTilt(playbookId) {
 }
 
 /** The plan a team brings into this week's game. */
+// A coordinator's scheme leans the play-calling (see schemes.js, staffCareers.js).
+function identityLean(state, teamId) {
+    const o = OFFENSE_SCHEMES[state?.frontOffice?.identities?.[teamId]?.offense];
+    return o ? { passTilt: o.passTilt * 0.6, deepShots: o.deepShots || 0 } : { passTilt: 0, deepShots: 0 };
+}
+
+const schemeForId = state => {
+    const sf = state?.frontOffice?.schemeFor;
+    return sf && sf.year === state.year && sf.week === state.week ? sf.playerId : null;
+};
+
 export function gamePlanFor(state, teamId) {
     if (!teamId) return null;
+    const lean = identityLean(state, teamId);
     if (teamId !== state?.userTeamId) {
-        const tilt = schemeTilt(TEAM_PLAYBOOK_MAP[teamId]);
-        return tilt ? { passTilt: tilt, aggression: 1, deepShots: 0, clockControl: 0.3, label: null } : null;
+        const tilt = schemeTilt(TEAM_PLAYBOOK_MAP[teamId]) + lean.passTilt;
+        return tilt || lean.deepShots ? { passTilt: tilt, aggression: 1, deepShots: lean.deepShots, clockControl: 0.3, label: null } : null;
     }
     const strategy = weeklyStrategy(state.weekStrategy);
     const base = STRATEGY_PLAN[strategy.id] || STRATEGY_PLAN.balanced;
     return {
         ...base,
-        passTilt: base.passTilt + schemeTilt(state.userPlaybookId || TEAM_PLAYBOOK_MAP[teamId]),
+        passTilt: base.passTilt + schemeTilt(state.userPlaybookId || TEAM_PLAYBOOK_MAP[teamId]) + lean.passTilt,
+        deepShots: base.deepShots + lean.deepShots,
         label: strategy.label,
         strategyId: strategy.id,
+        // Weekly prep: scheme for an opposing X-Factor (see xFactor.js).
+        focusId: schemeForId(state),
     };
 }
 

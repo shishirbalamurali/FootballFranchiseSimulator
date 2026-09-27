@@ -23,13 +23,13 @@ export const SECTIONS = [
     id: 'league',
     label: 'League',
     icon: 'IconLeague',
-    screens: ['standings', 'schedule', 'stats', 'college', 'journal'],
+    screens: ['standings', 'schedule', 'stats', 'college', 'xfactors', 'journal'],
   },
   {
     id: 'office',
     label: 'Front Office',
     icon: 'IconOffice',
-    screens: ['trade', 'freeAgency', 'assistants'],
+    screens: ['command', 'bigBoard', 'trade', 'freeAgency', 'contracts', 'assistants'],
   },
   {
     id: 'awards',
@@ -41,8 +41,12 @@ export const SECTIONS = [
 
 /** Sub-tab labels, keyed by screen id. */
 export const SCREEN_META = {
-  staff: { label: 'Coaching Staff', title: 'Coaching Tree' },
-  college: { label: 'Campus Watch', title: 'Campus Watch' },
+  staff: { label: 'Staff & Tree', title: 'Coaching Staff' },
+  college: { label: 'Saturdays', title: 'College Saturdays' },
+  command: { label: 'Command Center', title: 'Front Office' },
+  bigBoard: { label: 'Big Board', title: 'Big Board' },
+  contracts: { label: 'Contracts', title: 'Contracts' },
+  xfactors: { label: 'X-Factors', title: 'X-Factors' },
   journal: { label: 'Journal', title: 'Franchise Journal' },
   assistants: { label: 'Assistants', title: 'Front Office Assistants' },
   home:        { label: 'Hub',          title: 'Franchise Hub' },
@@ -52,7 +56,7 @@ export const SCREEN_META = {
   standings:   { label: 'Standings',    title: 'Standings' },
   schedule:    { label: 'Schedule',     title: 'Schedule' },
   stats:       { label: 'Stats',        title: 'League Stats' },
-  trade:       { label: 'Trade Center', title: 'Trade Center' },
+  trade:       { label: 'Trade Machine', title: 'Trade Machine' },
   freeAgency:  { label: 'Free Agency',  title: 'Free Agency' },
   awards:      { label: 'Awards',       title: 'League Awards' },
   draft:       { label: 'Draft',        title: 'Draft Room' },
@@ -87,7 +91,7 @@ export function primaryActionFor(phase, week) {
   switch (phase) {
     case 'regular':    return { label: `Sim Week ${week}`, screen: 'home', intent: 'sim' };
     case 'playoffs':   return { label: 'Enter Playoffs',    screen: 'playoffs' };
-    case 'offseason':  return { label: 'Start Offseason',   screen: 'freeAgency', intent: 'startFA' };
+    case 'offseason':  return { label: 'Offseason',         screen: 'command' };
     case 'freeAgency': return { label: 'Free Agency',       screen: 'freeAgency' };
     case 'draft':      return { label: 'Enter Draft Room',  screen: 'draft' };
     default:           return { label: 'Continue',          screen: 'home' };

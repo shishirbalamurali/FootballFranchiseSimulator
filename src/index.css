@@ -288,3 +288,29 @@ button:disabled { cursor: not-allowed; }
   --surface-hover: color-mix(in srgb, var(--nav-fg) 9%, transparent);
   --ink: #050407;
 }
+
+/* ── Front office overhaul (Claude) ─────────────────────────────────────── */
+/* X-Factor foil: a moving gold→violet border on the player's card. */
+.xf-frame {
+  position: relative;
+  background:
+    linear-gradient(var(--surface-raised), var(--surface-raised)) padding-box,
+    linear-gradient(120deg, var(--xfactor), var(--xfactor-2), var(--xfactor), var(--xfactor-2)) border-box;
+  background-size: 100% 100%, 300% 300%;
+  border: 3px solid transparent;
+  animation: foil 5s ease-in-out infinite;
+}
+.xf-text {
+  background: linear-gradient(100deg, var(--xfactor), var(--xfactor-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.xf-chip {
+  background: linear-gradient(100deg, var(--xfactor), var(--xfactor-2));
+  color: var(--chalk);
+}
+/* Status band on player cards: colour comes from the status tone. */
+.status-band { border-left: 6px solid var(--band, var(--status-neutral)); }
+/* Scout range bar: the band narrows as knowledge grows. */
+.range-track { position: relative; height: 10px; border-radius: 9999px; background: var(--surface-sunken); }
+.range-band { position: absolute; top: 0; bottom: 0; border-radius: 9999px; background: var(--team-tint-24); border: 2px solid var(--team-primary); transition: left var(--dur-slow) var(--ease-out), width var(--dur-slow) var(--ease-out); }
+.range-mark { position: absolute; top: -3px; width: 4px; height: 16px; border-radius: 2px; background: var(--ink); transform: translateX(-2px); }

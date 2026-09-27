@@ -92,7 +92,9 @@ export function treeOf(coaches = [], rootId) {
     return root ? build(root, 0) : null;
 }
 export function treePrestige(coaches, rootId) {
-    return Math.round(descendants(coaches, rootId).reduce((n, { c }) => n + (c.retired ? 2 : c.role === 'HC' && c.teamId ? 10 + (c.reputation || 50) / 10 : ['OC', 'DC'].includes(c.role) && c.teamId ? 4 : 1), 0));
+    // Only protégés who have moved on count: your own staff isn't a tree yet.
+    const home = coaches.find(c => c.id === rootId)?.teamId;
+    return Math.round(descendants(coaches, rootId).filter(({ c }) => !home || c.teamId !== home).reduce((n, { c }) => n + (c.retired ? 2 : c.role === 'HC' && c.teamId ? 10 + (c.reputation || 50) / 10 : ['OC', 'DC'].includes(c.role) && c.teamId ? 4 : 1), 0));
 }
 /** Biggest trees in the league: [{ root, size, headCoaches, prestige }]. */
 export function leagueTrees(coaches, n = 5) {
