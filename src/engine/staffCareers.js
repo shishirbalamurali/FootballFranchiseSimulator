@@ -26,8 +26,8 @@ export const USER_ROLES = ['OC', 'DC', 'Assistant', ...EXTRA_ROLES];
 
 export function coachAge(c, year) {
     const start = c.history?.[0]?.year ?? year;
-    const base = c.role === 'HC' ? 44 : c.role === 'Assistant' || EXTRA_ROLES.includes(c.role) ? 34 : 38;
-    return base + (hashSeed(`age:${c.id}`) % 14) + Math.max(0, year - start);
+    const base = c.role === 'HC' ? 48 : c.role === 'Assistant' || EXTRA_ROLES.includes(c.role) ? 33 : 38;
+    return base + (hashSeed(`age:${c.id}`) % (c.role === 'HC' ? 20 : 14)) + Math.max(0, year - start);
 }
 
 /** Derived profile: scheme, traits (two), ratings. */

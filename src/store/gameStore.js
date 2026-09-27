@@ -2129,7 +2129,9 @@ export const useGameStore = create((set, get) => ({
         // After draft, proceed to new regular season
         const { year, season, draftClass, freeAgents } = get();
         if (get().currentPickIndex < get().draftOrder.length) return;
-        const newSchedule = generateSeasonSchedule(TEAMS, year + 1, get().standings);
+        let newSchedule = generateSeasonSchedule(TEAMS, year + 1, get().standings);
+        // CLAUDE: the generator can (rarely) give up and return no games; never start an empty season.
+        for (let i = 0; i < 4 && !newSchedule.flat().length; i++) newSchedule = generateSeasonSchedule(TEAMS, year + 1, get().standings);
 
         // Convert undrafted prospects into UDFA free agents so user can sign them
         const undraftedFAs = draftClass.map(p => ({

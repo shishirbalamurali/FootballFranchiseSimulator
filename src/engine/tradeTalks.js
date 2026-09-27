@@ -13,6 +13,7 @@ import { tradeDeadMoney, SALARY_CAP } from './contracts.js';
 import { rosterSalary } from './cpuRosterManagement.js';
 
 export const ROSTER_MAX = 53;
+export const MAX_PACKAGE = 5;
 export const BANDS = [
     { id: 'accept', min: 1, label: 'Accept', tone: 'positive' },
     { id: 'close', min: 0.9, label: 'Close', tone: 'info' },
@@ -154,22 +155,32 @@ export function counterOffer(state, proposal) {
 
 /** Their asking price for the players you want: a package they'd accept. */
 export function whatWouldItTake(state, partner, playerIds = [], pickAsk = []) {
-    let proposal = { partner, give: { players: [], picks: [] }, get: { players: playerIds, picks: pickAsk } };
+    const base = { partner, give: { players: [], picks: [] }, get: { players: playerIds, picks: pickAsk } };
     const ctx = valueCtx(state);
     const mode = teamMode(partner, ctx);
-    const assets = userAssets(state).map(a => ({ a, v: a.kind === 'pick' ? pickAssetValue(a.pick, ctx) : perceivedPlayerValue(a.player, partner, ctx) }));
-    // Rebuilders want picks first; contenders want players first.
-    assets.sort((x, y) => (mode === 'rebuild' ? (x.a.kind === 'pick' ? -1 : 1) - (y.a.kind === 'pick' ? -1 : 1) : 0) || y.v - x.v);
-    const target = evaluateProposal(state, { ...proposal, give: { players: [], picks: [] } }).outgoing * thresholdFor(state, partner);
-    let have = 0;
-    for (const { a, v } of assets) {
-        if (have >= target) break;
-        // Skip assets that overshoot badly when a smaller one would do.
-        if (have + v > target * 1.6 && assets.some(x => x.v < v && have + x.v >= target)) continue;
-        proposal = withAsset(proposal, a); have += v;
+    const target = evaluateProposal(state, base).outgoing * thresholdFor(state, partner) * 1.01;
+    const valued = a => ({ a, v: a.kind === 'pick' ? pickAssetValue(a.pick, ctx) : perceivedPlayerValue(a.player, partner, ctx) });
+    // Spare parts and picks first; starters only if that isn't enough.
+    const spare = userAssets(state).map(valued);
+    const spareIds = new Set(spare.map(x => x.a.id));
+    const starters = (state.rosters?.[state.userTeamId] || []).filter(p => !spareIds.has(p.id)).map(p => valued({ kind: 'player', id: p.id, player: p }));
+    const order = list => [...list].sort((x, y) => (mode === 'rebuild' ? (x.a.kind === 'pick' ? -1 : 1) - (y.a.kind === 'pick' ? -1 : 1) : 0) || y.v - x.v);
+    for (const pool of [order(spare), [...order(spare), ...order(starters)]]) {
+        const chosen = [];
+        let have = 0;
+        for (const x of pool) { if (have >= target) break; chosen.push(x); have += x.v; }
+        if (have < target) continue;
+        // Trim: drop the smallest pieces the deal doesn't need.
+        for (const x of [...chosen].sort((p, q) => p.v - q.v)) if (have - x.v >= target) { chosen.splice(chosen.indexOf(x), 1); have -= x.v; }
+        // No GM takes a truckload of spare parts: five pieces at most.
+        if (chosen.length > MAX_PACKAGE) continue;
+        let proposal = chosen.reduce((acc, x) => withAsset(acc, x.a), base);
+        // In season the roster must stay at 53: send back the cheapest depth players.
+        const depth = order(spare).filter(x => x.a.kind === 'player' && !chosen.includes(x)).reverse();
+        for (let i = 0; i < depth.length && evaluateProposal(state, proposal).cap.rosterAfter > ROSTER_MAX && state.phase === 'regular'; i++) proposal = withAsset(proposal, depth[i].a);
         if (evaluateProposal(state, proposal).ok) return proposal;
     }
-    return evaluateProposal(state, proposal).ok ? proposal : null;
+    return null;
 }
 
 export const pickLabel = p => `${p.year ? `${p.year} ` : ''}R${p.round}${p.originalTeamId ? ` (${String(p.originalTeamId).toUpperCase().slice(0, 3)})` : ''}${p.comp ? ' comp' : ''}`;
