@@ -23,6 +23,9 @@
 // produces NFL-average results and tests/calibration.mjs keeps the league in
 // line with 2022-24 production.
 
+import { playStyleIdFor, styleMods, clutchBase } from './playStyles.js';
+import { characterFor } from './character.js';
+
 // ── RANDOM HELPERS ────────────────────────────────────────────────────────────
 
 export function gaussian(mean, stdev) {
@@ -102,7 +105,29 @@ export const FLAG = {
     TD: 1, FIRST: 2, TURNOVER: 4, FUMBLE: 8, SAFETY: 16, RETURN_TD: 32,
     FOURTH_GO: 64, OOB: 128, TFL: 256, DEFENDED: 512, TWO_MIN: 1024,
     TOUCHBACK: 2048, FAIR_CATCH: 4096, RECOVERED: 8192, HAIL_MARY: 16384,
+    // Drama: the Witching Hour (final 5:00 of a one-score game, and overtime),
+    // a clutch player delivering in it, one wilting in it, trick plays,
+    // blocked kicks and an iced kicker.
+    WITCHING: 1 << 15, CLUTCH: 1 << 16, TRICK: 1 << 17, BLOCKED: 1 << 18, CHOKE: 1 << 19, ICED: 1 << 20,
 };
+
+// Composure under pressure, [-1, 1]; see playStyles.js clutchBase.
+const clutchCache = new Map();
+export function clutchOf(p) {
+    if (!p?.id) return 0;
+    const key = `${p.id}|${p.personality ?? ''}|${p.ovr ?? ''}`;
+    let c = clutchCache.get(key);
+    if (c === undefined) {
+        let composure = null;
+        try { composure = characterFor(p)?.axes?.composure ?? null; } catch { composure = null; }
+        c = clutchBase(p, composure);
+        if (clutchCache.size > 8000) clutchCache.clear();
+        clutchCache.set(key, c);
+    }
+    return c;
+}
+const CLUTCH_STAR = 0.35;
+const CHOKE_LINE = -0.25;
 // [q, clock, offense(0 home/1 away), yardline, down, toGo, kind, yards, a, b, x, flags, homeScore, awayScore, extra]
 export const PLAY_FIELDS = ['q', 'clock', 'off', 'yl', 'down', 'togo', 'kind', 'yards', 'a', 'b', 'x', 'flags', 'hs', 'as', 'extra'];
 
@@ -137,7 +162,7 @@ function lineFor(team, player) {
 }
 
 // Everything an offense needs to call and resolve a snap against one defense.
-function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
+function buildOffense(off, def, homeFieldMod, weather, plan, formEdge, sloppy = 0) {
     const passMult  = weather?.passMultiplier  ?? 1.0;
     const rushMult  = weather?.rushMultiplier  ?? 1.0;
     const scoreMult = weather?.scoreMultiplier ?? 1.0;
@@ -152,6 +177,7 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
     const PROC = tr.processing || 70;
     const POCK = tr.pocket     || 65;
     const ARM  = tr.arm        || 70;
+    const qs   = styleMods(playStyleIdFor(qb));
 
     // Form moves every matchup term the same way a ratings edge would.
     const f = formEdge;
@@ -205,6 +231,15 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
     pInt += plan.deepShots * 0.020;
     ypa  += plan.deepShots * 6;
 
+    // Play style: how this quarterback plays (playStyles.js)
+    pCmp  += qs.cmp  || 0;
+    pInt  += qs.int  || 0;
+    ypa   += qs.ypa  || 0;
+    pSack += qs.sack || 0;
+
+    // Short week (Thursday night): sloppier football
+    if (sloppy) { pInt *= 1 + 0.12 * sloppy; pCmp -= 0.008 * sloppy; ypa -= 0.15 * sloppy; }
+
     pCmp *= passMult;
     ypa  *= passMult;
     if (passMult < 1.0) {
@@ -219,8 +254,8 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
     // QB legs
     const qbSpeed  = qb.attributes?.universal?.speed || 60;
     const isMobile = qbSpeed > LG.qbSpeed + 8;
-    const scramRate = Math.min(0.12, 0.015 + (qbSpeed > LG.qbSpeed ? (qbSpeed - LG.qbSpeed) * 0.003 : 0) + (isMobile ? 0.035 : 0));
-    const qbDesigned = qbSpeed > LG.qbSpeed + 9 ? 0.09 : 0;
+    const scramRate = Math.min(0.14, 0.015 + (qbSpeed > LG.qbSpeed ? (qbSpeed - LG.qbSpeed) * 0.003 : 0) + (isMobile ? 0.035 : 0) + (qs.scram || 0));
+    const qbDesigned = (qbSpeed > LG.qbSpeed + 9 ? 0.09 : 0) + (qs.designed || 0);
     const qbYpc = Math.max(2.0, 4.3 + (qbSpeed - LG.qbSpeed) * 0.12);
 
     // Backfield: bell-cow to committee, shares from the old usage model
@@ -228,18 +263,19 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
         const a = rb.attributes?.position || {};
         const VOL = a.vol || 70, EFF = a.eff || 70, EXP = a.exp || 70, GL = a.gl || 70, SEC = a.sec || 70;
         const rbOvr = rb.ovr || 70;
-        const share = idx === 0 ? clamp(0.57 + 0.007 * (rbOvr - LG.rbOvr) + 0.006 * (VOL - LG.rbVol), 0.38, 0.80)
+        const rs = styleMods(playStyleIdFor(rb));
+        const share = (idx === 0 ? clamp(0.57 + 0.007 * (rbOvr - LG.rbOvr) + 0.006 * (VOL - LG.rbVol), 0.38, 0.80)
                     : idx === 1 ? clamp(0.28 + 0.003 * (rbOvr - (LG.rbOvr - 8)), 0.12, 0.40)
-                    : 0.10;
+                    : 0.10) * (1 + (rs.share || 0) * 2);
         let ypc = 4.75 + 0.014 * (EFF - LG.rbEff) + 0.010 * (EXP - LG.rbExp)
                        + 0.018 * (olRun - LG.ol) - 0.014 * (runDefense - LG.defFront7);
         if (EFF > LG.rbEff + 6) ypc += Math.pow(EFF - (LG.rbEff + 6), 1.4) * 0.010;
         ypc = clamp(ypc * rushMult, 2.5, 6.2);
         return {
             p: rb, weight: share, ypc,
-            burst: clamp(0.042 + 0.0012 * (EXP - LG.rbExp) + 0.0006 * (olRun - LG.ol), 0.015, 0.08),
-            goalLine: (GL - LG.rbGl) * 0.03,
-            fumble: Math.max(0.002, 0.0075 - 0.00005 * (SEC - LG.rbSec)),
+            burst: clamp(0.042 + 0.0012 * (EXP - LG.rbExp) + 0.0006 * (olRun - LG.ol) + (rs.burst || 0), 0.015, 0.09),
+            goalLine: (GL - LG.rbGl) * 0.03 + (rs.gl || 0),
+            fumble: Math.max(0.002, 0.0075 - 0.00005 * (SEC - LG.rbSec)) * (rs.fumble || 1) * (1 + 0.2 * sloppy),
         };
     });
 
@@ -270,12 +306,13 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
             if (pos === 'WR')      natYpc = 11.0 + ((a.deepThreat || a.routeRun || u.speed || 75) - 50) / 50 * 4.0;
             else if (pos === 'TE') natYpc = 8.5 + ((a.catching || a.routeRun || 75) - 50) / 50 * 3.5;
             else                   natYpc = 5.5 + ((u.speed || a.catching || 70) - 50) / 50 * 3.0;
+            const ts = styleMods(playStyleIdFor(p));
             targets.push({
                 p, pos,
-                weight: GROUP_TARGET_SHARE[pos] * slots[i] / slotSum * (0.72 + Math.random() * 0.56),
-                catchMult: (CATCH_RATE[pos] || LEAGUE_CATCH_RATE) / LEAGUE_CATCH_RATE,
-                natYpc: Math.max(3, natYpc),
-                rz: pos === 'TE' ? 1.35 : pos === 'WR' ? 1.0 : 0.7,
+                weight: GROUP_TARGET_SHARE[pos] * slots[i] / slotSum * (0.72 + Math.random() * 0.56) * (ts.tgt || 1),
+                catchMult: (CATCH_RATE[pos] || LEAGUE_CATCH_RATE) / LEAGUE_CATCH_RATE * (ts.catch || 1),
+                natYpc: Math.max(3, natYpc * (ts.ypc || 1)),
+                rz: (pos === 'TE' ? 1.35 : pos === 'WR' ? 1.0 : 0.7) * (ts.rz || 1),
             });
         });
     }
@@ -291,44 +328,57 @@ function buildOffense(off, def, homeFieldMod, weather, plan, formEdge) {
     const kAcc = kAttr.kickAccuracy || LG.kickAcc;
     const kPow = kAttr.kickPower || kAttr.kickAccuracy || LG.kickPow;
     const weatherKick = 1 - (1 - scoreMult) * 0.5;
+    const ks = styleMods(playStyleIdFor(kicker));
+    const punter = (off.roster || []).filter(p => p.position === 'P').sort((a, b) => (b.ovr || 0) - (a.ovr || 0))[0] || null;
+    const ps = styleMods(playStyleIdFor(punter));
 
     return {
         team: off, qb, plan,
         pSack, pCmp, pInt, ypa,
-        sigma: 0.80 + plan.deepShots * 1.2,
+        sigma: 0.80 + plan.deepShots * 1.2 + (qs.sigma || 0),
         scramRate, qbDesigned, qbYpc, isMobile,
         rbs, targets,
         lean: off.passLean || 0,
         passMult,
-        kicker, kAcc, kPow, weatherKick,
-        fgRange: clamp(54 + (kPow - LG.kickPow) * 0.30, 47, 61) * (scoreMult < 1 ? 0.93 : 1),
+        kicker, kAcc, kPow, weatherKick, kClutch: ks.clutch || 0,
+        fgRange: clamp(54 + (kPow - LG.kickPow) * 0.30 + (ks.range || 0), 47, 63) * (scoreMult < 1 ? 0.93 : 1),
+        punter, puntMult: ps.punt || 1, pinMult: ps.pin || 1,
+        sloppy,
     };
 }
 
 // Who makes the plays on defense. Weights follow the old leaderboard tuning.
 function buildDefense(def) {
     const d = def.depth;
+    // Play styles tilt who makes the plays (an Edge Bender gets home, a
+    // Ballhawk gets his hands on the ball) without changing how often.
+    const mods = new Map();
+    const m = p => {
+        let v = mods.get(p.id);
+        if (!v) { v = styleMods(playStyleIdFor(p)); mods.set(p.id, v); }
+        return v;
+    };
     const rushers = d.rushers.map(p => {
         const pos = p.attributes?.position || {};
         const pr = Math.max(pos.finesseMoves || 0, pos.powerMoves || 0, pos.passRush || 0, pos.blitz || 0, pos.blockShedding || 0) || 70;
-        return { p, weight: (p.position === 'DL' ? 1.0 : 0.55) * Math.pow(pr / 100, 4.6) * Math.pow(Math.max(40, p.ovr) / 100, 2.0) };
+        return { p, weight: (p.position === 'DL' ? 1.0 : 0.55) * Math.pow(pr / 100, 4.6) * Math.pow(Math.max(40, p.ovr) / 100, 2.0) * (m(p).rush || 1) };
     });
     const ballhawks = d.coverage.map(p => {
         const pos = p.attributes?.position || {};
         const cov = pos.zoneCoverage || pos.manCoverage || pos.coverage || 70;
         const hawk = ((pos.ballSkills || cov) * 0.65 + cov * 0.35) / 100;
         const posWt = p.position === 'CB' ? 1.0 : p.position === 'S' ? 0.80 : 0.20;
-        return { p, weight: posWt * Math.pow(hawk, 5.2) * Math.pow(Math.max(40, p.ovr) / 100, 2.5) };
+        return { p, weight: posWt * Math.pow(hawk, 5.2) * Math.pow(Math.max(40, p.ovr) / 100, 2.5) * (m(p).hawk || 1) };
     });
     const cover = d.coverage.filter(p => p.position === 'CB' || p.position === 'S').map(p => {
         const pos = p.attributes?.position || {};
         const cov = pos.zoneCoverage || pos.manCoverage || pos.coverage || 70;
-        return { p, weight: (p.position === 'CB' ? 1.0 : 0.6) * Math.pow(cov / 100, 3) };
+        return { p, weight: (p.position === 'CB' ? 1.0 : 0.6) * Math.pow(cov / 100, 3) * (m(p).cover || 1) };
     });
     const tackleWt = (p, table) => {
         const pa = p.attributes?.position || {};
         const tkl = pa.tackle || pa.pursuit || pa.zoneCoverage || pa.manCoverage || pa.coverage || 70;
-        return (table[p.position] || 1.0) * Math.pow(tkl / 100, 1.8) * Math.pow((p.ovr || 70) / 100, 1.2);
+        return (table[p.position] || 1.0) * Math.pow(tkl / 100, 1.8) * Math.pow((p.ovr || 70) / 100, 1.2) * (m(p).tackle || 1);
     };
     const RUN_TKL  = { DL: 1.55, LB: 2.90, CB: 0.95, S: 1.70 };
     const PASS_TKL = { DL: 0.35, LB: 1.90, CB: 2.35, S: 2.30 };
@@ -337,9 +387,9 @@ function buildDefense(def) {
     const stuffers = d.front7.map(p => {
         const pa = p.attributes?.position || {};
         const pr = pa.blitz || pa.blockShedding || pa.powerMoves || pa.pursuit || 70;
-        return { p, weight: (p.position === 'DL' ? 1.3 : 1.0) * Math.pow(pr / 100, 3) };
+        return { p, weight: (p.position === 'DL' ? 1.3 : 1.0) * Math.pow(pr / 100, 3) * (m(p).stuff || 1) };
     });
-    return { team: def, rushers, ballhawks, cover, runTacklers, passTacklers, stuffers };
+    return { team: def, rushers, ballhawks, cover, runTacklers, passTacklers, stuffers, mod: p => (p ? m(p) : {}) };
 }
 
 // ── THE GAME ──────────────────────────────────────────────────────────────────
@@ -354,12 +404,28 @@ export function playGame(home, away, opts = {}) {
     const { weather = null, allowTie = true } = opts;
     const teams = [home, away];
     const plans = [normalizePlan(opts.homePlan), normalizePlan(opts.awayPlan)];
-    const form = teams.map(() => ({ off: gaussian(0, FORM_SD_OFF), def: gaussian(0, FORM_SD_DEF) }));
+    // Game context (gameContext.js engineContext): who's the underdog in a
+    // division game, how big the stage is, what's at stake. Null = neutral.
+    const ec = opts.context || null;
+    const fs = ec?.formSpread || 1;
+    const form = teams.map((_, i) => {
+        const shift = ec?.formShift?.[i] || { off: 0, def: 0 };
+        const lift = ec && ec.underdog === i ? (ec.dogLift || 0) : 0;
+        return {
+            off: gaussian(0, FORM_SD_OFF * fs) + (shift.off || 0) + lift,
+            def: gaussian(0, FORM_SD_DEF * fs) + (shift.def || 0) + lift * 0.6,
+        };
+    });
+    const homeEdge = HOME_EDGE + (ec?.homeEdge || 0);
+    // How much composure decides the Witching Hour: more on a bigger stage.
+    const pressure = 0.6 + 0.8 * (ec?.pressure ?? 0.5);
     // Home teams get a crowd edge on top of the -3 their visitors' defense plays at.
-    const offense = [0, 1].map(i => buildOffense(teams[i], teams[1 - i], i === 0 ? 3 : 0, weather, plans[i], form[i].off - form[1 - i].def + (i === 0 ? HOME_EDGE : 0)));
+    const offense = [0, 1].map(i => buildOffense(teams[i], teams[1 - i], i === 0 ? 3 : 0, weather, plans[i], form[i].off - form[1 - i].def + (i === 0 ? homeEdge : 0), ec?.sloppy || 0));
     const defense = [0, 1].map(i => buildDefense(teams[i]));
 
-    // Name table for the play log: player id → index; entries are [name, position, side]
+    // Name table for the play log: player id → index; entries are
+    // [name, position, side, playerId, playStyleId] (the last two let the
+    // broadcast show the face and signature of whoever made the play).
     const names = [];
     const nameIdx = new Map();
     const ref = (side, p) => {
@@ -367,7 +433,7 @@ export function playGame(home, away, opts = {}) {
         let i = nameIdx.get(p.id);
         if (i === undefined) {
             i = names.length;
-            names.push([p.name || 'Player', p.position || '', side]);
+            names.push([p.name || 'Player', p.position || '', side, p.id ?? null, playStyleIdFor(p)]);
             nameIdx.set(p.id, i);
         }
         return i;
@@ -382,6 +448,9 @@ export function playGame(home, away, opts = {}) {
         score: [0, 0], quarters: [[0, 0, 0, 0], [0, 0, 0, 0]],
         to: [3, 3], ot: false, otDone: [0, 0], ended: false,
         warned: false, plays: [], scoring: [], lastSpike: false,
+        // momentum edge per side (rating-ish points, decays every snap),
+        // Witching Hour start [q, clock], and a pending trick-play flag
+        mo: [0, 0], witch: null, trick: 0,
     };
     const receiveFirst = chance(0.5) ? 0 : 1;
 
@@ -395,11 +464,19 @@ export function playGame(home, away, opts = {}) {
         g.quarters[side][qi] += pts;
         if (kind) g.scoring.push([g.q, Math.max(0, Math.round(g.clock)), side, pts, kind]);
     };
+    // The Witching Hour: the last five minutes of a one-score game, and all
+    // of overtime. Composure decides it; chaos rises.
+    const inWitching = () => g.ot || (g.q === 4 && g.clock <= 300 && Math.abs(g.score[0] - g.score[1]) <= 8);
     const record = (fields) => {
         const p = {
             q: g.q, clock: Math.max(0, Math.round(g.clock)), off: g.poss, yl: g.yl, down: g.down, togo: g.togo,
             kind: 0, yards: 0, a: -1, b: -1, x: -1, flags: 0, extra: 0, ...fields,
         };
+        if (inWitching()) {
+            p.flags |= FLAG.WITCHING;
+            if (!g.witch) g.witch = [p.q, p.clock];
+        }
+        if (g.trick) { p.flags |= g.trick; g.trick = 0; }
         g.plays.push([p.q, p.clock, p.off, p.yl, p.down, p.togo, p.kind, p.yards, p.a, p.b, p.x, p.flags, g.score[0], g.score[1], p.extra]);
         return g.plays[g.plays.length - 1];
     };
@@ -407,6 +484,13 @@ export function playGame(home, away, opts = {}) {
     const restamp = tuple => { tuple[12] = g.score[0]; tuple[13] = g.score[1]; };
 
     const lead = side => g.score[side] - g.score[1 - side];
+
+    // Momentum: turnovers, stops, scores and chunk plays swing it; the home
+    // crowd amplifies it; it fades a little every snap.
+    const bump = (side, amt) => { g.mo[side] = Math.min(6, g.mo[side] + amt * (side === 0 ? 1.2 : 1)); };
+    const moEdge = side => clamp(g.mo[side] - g.mo[1 - side], -6, 6);
+    // Witching-Hour composure for one player, scaled by the stage.
+    const clutchNow = p => (inWitching() ? clutchOf(p) * pressure : 0);
     const gameLeft = () => (g.q >= 5 ? g.clock : g.clock + 900 * (4 - g.q));
     const isLateHalf = secs => (g.q === 2 || g.q === 4 || g.q >= 5) && g.clock <= secs;
 
@@ -491,12 +575,36 @@ export function playGame(home, away, opts = {}) {
         return list.reduce((best, p) => ((p.attributes?.universal?.speed || 0) > (best.attributes?.universal?.speed || 0) ? p : best), list[0]);
     }
 
+    // A punt that never gets past the line: the defense scoops it, and near
+    // the end zone it is often a touchdown.
+    function blockedPunt() {
+        const side = g.poss, def = 1 - side;
+        const blocker = pick(defense[def].rushers);
+        const t = record({ kind: KIND.PUNT, yards: 0, x: ref(def, blocker), flags: FLAG.BLOCKED });
+        tick(5, true, side);
+        endPossession();
+        bump(def, 3);
+        const ballYl = g.yl - Math.round(4 + Math.random() * 8); // where it lands, punting team's view
+        if (ballYl <= 0 || chance(ballYl <= 30 ? 0.35 : 0.12)) {
+            const scorer = chance(0.5) ? blocker : pick(defense[def].ballhawks);
+            if (scorer) { const l = S(def, scorer); if (l) l.defensiveTds++; }
+            t[14] = ref(def, scorer);
+            t[11] |= FLAG.RETURN_TD | FLAG.TD;
+            touchdown(def, 'DEF', t, true);
+            return;
+        }
+        newSeries(def, clamp(100 - ballYl, 1, 99));
+        checkOvertimeEnd();
+    }
+
     function punt() {
         const side = g.poss, recv = 1 - side;
         const room = 100 - g.yl;
-        let gross = Math.round(clamp(gaussian(46, 6), 28, 68));
+        const u = offense[side];
+        if (chance(0.005)) { blockedPunt(); return; }
+        let gross = Math.round(clamp(gaussian(46 * u.puntMult, 6), 28, 70));
         // Plus territory: aim short instead of into the end zone
-        if (room < 55) gross = Math.round(Math.min(gross, room - clamp(gaussian(8, 5), 1, 18)));
+        if (room < 55) gross = Math.round(Math.min(gross, room - clamp(gaussian(8, 5), 1, 18) / u.pinMult));
         gross = Math.max(20, gross);
         let flags = 0, ret = 0, returner = -1;
         let spot = g.yl + gross;
@@ -523,27 +631,55 @@ export function playGame(home, away, opts = {}) {
 
     function fgChance(dist, u) {
         const d = Math.max(0, dist - 22);
-        let p = 0.975 - Math.pow(d / 37, 2.2) * 0.5;
+        // A shade above the old 0.975 base, so blocked kicks (below) leave the
+        // league's FG% where it was.
+        let p = 0.990 - Math.pow(d / 37, 2.2) * 0.5;
         p += (u.kAcc - LG.kickAcc) * 0.004;
         p *= u.weatherKick;
         return clamp(p, 0.05, 0.995);
     }
 
     function fieldGoal() {
-        const side = g.poss, u = offense[side];
+        const side = g.poss, u = offense[side], def = 1 - side;
         const dist = 100 - g.yl + 17;
-        const made = chance(fgChance(dist, u));
         const k = u.kicker;
+        let flags = 0;
+        let p = fgChance(dist, u);
+        if (inWitching()) {
+            // Icing the kicker: a timeout right before the snap.
+            if (dist >= 38 && g.to[def] > 0 && chance(0.5)) { g.to[def]--; flags |= FLAG.ICED; p -= 0.015; }
+            p += 0.06 * clutchNow(k) + u.kClutch;
+        }
+        const blocked = chance(0.010 + Math.max(0, dist - 45) * 0.001);
+        const blocker = blocked ? pick(defense[def].rushers) : null;
+        const made = !blocked && chance(clamp(p, 0.03, 0.995));
+        const c = flags || inWitching() ? clutchOf(k) : 0;
+        if (inWitching() && made && c >= CLUTCH_STAR) flags |= FLAG.CLUTCH;
+        if (inWitching() && !made && !blocked && c <= CHOKE_LINE) flags |= FLAG.CHOKE;
+        if (blocked) flags |= FLAG.BLOCKED;
         const line = S(side, k);
         if (line) { line.fga++; if (made) line.fgm++; }
-        const tuple = record({ kind: made ? KIND.FG : KIND.FG_MISS, yards: dist, a: ref(side, k) });
+        const tuple = record({ kind: made ? KIND.FG : KIND.FG_MISS, yards: dist, a: ref(side, k), x: ref(def, blocker), flags });
         tick(5, true, side);
         endPossession();
         if (made) {
             addPoints(side, 3, 'FG');
             restamp(tuple);
             if (!walkOff(side, false) && !checkOvertimeEnd()) kickoff(side);
+        } else if (blocked) {
+            bump(def, 3);
+            if (chance(0.1)) {
+                const runner = pick(defense[def].ballhawks) || blocker;
+                if (runner) { const l = S(def, runner); if (l) l.defensiveTds++; }
+                tuple[14] = ref(def, runner);
+                tuple[11] |= FLAG.RETURN_TD | FLAG.TD;
+                touchdown(def, 'DEF', tuple, true);
+                return;
+            }
+            newSeries(def, clamp(100 - (g.yl - 8) + Math.round(expo(6)), 1, 99));
+            checkOvertimeEnd();
         } else {
+            bump(def, 1);
             newSeries(1 - side, Math.max(20, 100 - (g.yl - 7)));
             checkOvertimeEnd();
         }
@@ -584,6 +720,7 @@ export function playGame(home, away, opts = {}) {
     // The caller has already closed the offense's possession in that case.
     function touchdown(side, kindTag, tuple, defensive = false) {
         const base = g.score[side];
+        bump(side, defensive ? 3 : 1.5);
         addPoints(side, 6, kindTag);
         restamp(tuple);
         const ev = g.scoring[g.scoring.length - 1];
@@ -692,6 +829,7 @@ export function playGame(home, away, opts = {}) {
         const side = g.poss, def = 1 - side;
         const u = offense[side];
         const dfn = defense[def];
+        g.mo[0] *= 0.88; g.mo[1] *= 0.88;
 
         if (canKneel(side)) {
             const t = record({ kind: KIND.KNEEL, yards: -1, a: ref(side, u.qb) });
@@ -711,10 +849,20 @@ export function playGame(home, away, opts = {}) {
         if (lastPlay && (g.q === 4 || g.q >= 5) && lead(side) < 0) { passPlay(side, def, u, dfn, { hail: g.yl >= 40 }); return; }
 
         if (g.down === 4) {
-            const call = fourthDownCall(side);
+            let call = fourthDownCall(side);
+            // The fake: a gamble aggressive staffs take more often, never
+            // when the game is on the line (everyone's expecting it then).
+            const lateClose = g.q >= 4 && gameLeft() <= 300;
+            if (!lateClose && g.togo <= 5
+                && ((call === 'punt' && g.yl >= 25 && g.yl <= 65 && chance(0.010 * plans[side].aggression))
+                 || (call === 'fg' && 100 - g.yl <= 30 && chance(0.007 * plans[side].aggression)))) {
+                g.trick = FLAG.TRICK;
+                call = 'fake';
+            }
             if (call === 'fg') { fieldGoal(); return; }
             if (call === 'punt') { punt(); return; }
             g.goingForIt = true;
+            if (call === 'fake') { runPlay(side, def, u, dfn, { fake: true }); g.goingForIt = false; return; }
         }
 
         const third = g.down === 3;
@@ -737,6 +885,7 @@ export function playGame(home, away, opts = {}) {
         if (yards >= togo) {
             tuple[11] |= FLAG.FIRST;
             team[side].firstDowns++;
+            if (g.goingForIt) bump(side, 1.5);
             g.down = 1;
             g.togo = Math.min(10, 100 - g.yl);
             return false;
@@ -746,6 +895,7 @@ export function playGame(home, away, opts = {}) {
         if (g.down > 4) {
             // Turnover on downs
             tuple[11] |= FLAG.TURNOVER;
+            bump(1 - side, 2.5);
             record({ kind: KIND.DOWNS, yards: 0 });
             turnover(100 - g.yl);
             checkOvertimeEnd();
@@ -760,6 +910,8 @@ export function playGame(home, away, opts = {}) {
         const obvious = (g.down >= 3 && g.togo >= 6) || hurry(side);
         const garbage = g.q === 4 && lead(def) >= 17; // prevent defense
         const toGoal = 100 - g.yl;
+        const mo = moEdge(side);
+        const W = inWitching();
 
         // Spike to stop the clock in a hurry-up with no timeouts
         if (hurry(side) && g.to[side] === 0 && g.clock <= 40 && g.clock > 8 && g.down < 3 && !g.lastSpike && chance(0.5)) {
@@ -778,7 +930,7 @@ export function playGame(home, away, opts = {}) {
         g.lastSpike = false;
 
         // Sack
-        if (!ctx.hail && chance(u.pSack * (obvious ? 1.18 : 0.92) * (garbage ? 0.7 : 1))) {
+        if (!ctx.hail && chance(u.pSack * (obvious ? 1.18 : 0.92) * (garbage ? 0.7 : 1) * (1 - 0.03 * mo))) {
             const sacker = pick(dfn.rushers);
             const loss = Math.round(clamp(gaussian(6.8, 2.4), 1, 14));
             const allowed = u.team.depth.ol.length ? weightedPick(u.team.depth.ol.map(p => ({ p, weight: Math.pow(Math.max(1, 100 - (p.attributes?.position?.passBlock || 70)), 2) })))?.p : null;
@@ -786,8 +938,10 @@ export function playGame(home, away, opts = {}) {
             if (qbLine) qbLine.sacks++;
             if (sacker) { const l = S(def, sacker); if (l) l.sacks++; }
             team[side].sacks++; team[side].sackYds += loss;
-            const strip = chance(0.075);
-            const t = record({ kind: KIND.SACK, yards: -loss, a: qbRef, x: ref(def, sacker), flags: strip ? FLAG.FUMBLE | FLAG.TURNOVER : 0 });
+            const strip = chance(0.075 * (dfn.mod(sacker).strip || 1));
+            const clutchSack = W && clutchOf(sacker) >= CLUTCH_STAR ? FLAG.CLUTCH : 0;
+            const t = record({ kind: KIND.SACK, yards: -loss, a: qbRef, x: ref(def, sacker), flags: (strip ? FLAG.FUMBLE | FLAG.TURNOVER : 0) | clutchSack });
+            if (!strip) bump(def, 0.6);
             g.yl -= loss;
             if (g.yl <= 0) { tick(6, false, side); safety(def, t); return; }
             if (strip) {
@@ -823,10 +977,20 @@ export function playGame(home, away, opts = {}) {
             return;
         }
 
-        // The throw
-        const wideouts = ctx.hail ? u.targets.filter(t => t.pos === 'WR') : null;
+        // The throw. A flea-flicker is a rare shot play for an aggressive
+        // staff: the back takes the handoff, pitches it back, and the
+        // quarterback looks deep.
+        const flea = !ctx.hail && !hurry(side) && g.down <= 2 && g.yl >= 25 && g.yl <= 70
+            && chance(0.0045 * plans[side].aggression);
+        if (flea) g.trick = FLAG.TRICK;
+        // Hot hand: a receiver who is cooking gets fed.
+        const hot = t => {
+            const l = S(side, t.p);
+            return l ? 1 + Math.min(2, l.recTds) * 0.08 + (l.recYards >= 100 ? 0.05 : 0) : 1;
+        };
+        const wideouts = ctx.hail || flea ? u.targets.filter(t => t.pos === 'WR') : null;
         const tgt = weightedPick(wideouts?.length ? wideouts
-            : toGoal <= 20 ? u.targets.map(t => ({ ...t, weight: t.weight * t.rz })) : u.targets);
+            : u.targets.map(t => ({ ...t, weight: t.weight * (toGoal <= 20 ? t.rz : 1) * hot(t) })));
         if (qbLine) qbLine.attempts++;
         team[side].att++;
         if (!tgt) { advanceDown(0, record({ kind: KIND.INC, a: qbRef })); tick(5, true, side); return; }
@@ -839,6 +1003,11 @@ export function playGame(home, away, opts = {}) {
         else if (toGoal <= 20) pC *= 0.93;
         if (garbage) pC += 0.06;
         if (g.down >= 3 && g.togo >= 10) pC -= 0.03;
+        // Momentum, and in the Witching Hour, composure: clutch passers and
+        // receivers deliver, volatile ones don't.
+        const cQ = clutchNow(u.qb), cR = clutchNow(tgt.p);
+        pC += 0.004 * mo + 0.045 * cQ + 0.02 * cR;
+        if (flea) pC *= 0.85;
         if (ctx.hail) pC = 0.10;
         const complete = chance(clamp(pC, 0.05, 0.92));
 
@@ -847,7 +1016,8 @@ export function playGame(home, away, opts = {}) {
             if (ctx.hail) yds = toGoal;
             else {
                 const base = tgt.ypc * (garbage ? 0.8 : 1) * (g.down >= 3 ? 0.95 + Math.min(0.25, g.togo / 40) : 1);
-                yds = Math.round(base * lognormal1(u.sigma));
+                yds = Math.round(base * lognormal1(u.sigma * (W ? 1.12 : 1)));
+                if (flea) yds = Math.round(Math.max(yds, 14) * (1.3 + Math.random() * 0.7));
                 if (tgt.pos === 'RB' && chance(0.12)) yds -= Math.round(1 + Math.random() * 3);
                 if (toGoal <= 20 && yds > 0 && yds < toGoal && chance(0.08)) yds = toGoal;
             }
@@ -863,6 +1033,8 @@ export function playGame(home, away, opts = {}) {
             const t = record({ kind: KIND.PASS, yards: yds, a: qbRef, b: tRef, x: ref(def, tackler),
                 flags: (oob ? FLAG.OOB : 0) | (fumble ? FLAG.FUMBLE | FLAG.TURNOVER : 0) | (ctx.hail ? FLAG.HAIL_MARY : 0) });
             g.yl += yds;
+            if (W && (td || yds >= 20 || (g.down === 4 && yds >= g.togo)) && (clutchOf(u.qb) >= CLUTCH_STAR || clutchOf(tgt.p) >= CLUTCH_STAR)) t[11] |= FLAG.CLUTCH;
+            if (!td && yds >= 25) bump(side, 1.2);
             if (td) {
                 if (qbLine) qbLine.tds++;
                 if (rLine) { rLine.recTds++; rLine.tds++; }
@@ -885,7 +1057,10 @@ export function playGame(home, away, opts = {}) {
         }
 
         // Incomplete — or picked off
-        const intP = ctx.hail ? 0.22 : u.pInt * 1.75 * (garbage ? 0.9 : 1) * (hurry(side) && lead(side) < 0 ? 1.25 : 1);
+        // A volatile quarterback who has already thrown two presses.
+        const rattled = qbLine && qbLine.ints >= 2 && clutchOf(u.qb) < 0 ? 1.15 : 1;
+        const intP = ctx.hail ? 0.22 : u.pInt * 1.75 * (garbage ? 0.9 : 1) * (hurry(side) && lead(side) < 0 ? 1.25 : 1)
+            * Math.max(0.4, 1 - 0.35 * cQ) * (1 - 0.03 * mo) * rattled;
         if (chance(intP)) {
             const hawk = pick(dfn.ballhawks);
             if (qbLine) qbLine.ints++;
@@ -893,11 +1068,13 @@ export function playGame(home, away, opts = {}) {
             team[side].turnovers++;
             const air = ctx.hail ? toGoal : Math.round(clamp(gaussian(13, 7), 2, toGoal));
             const spotForDef = 100 - Math.min(99, g.yl + air); // defense's yardline at the catch
-            const sixP = 0.055 + (spotForDef >= 60 ? 0.07 : 0);
+            const sixP = (0.055 + (spotForDef >= 60 ? 0.07 : 0)) * (dfn.mod(hawk).six || 1);
             let ret = Math.round(Math.min(expo(11), 99 - spotForDef));
             const six = !ctx.hail && chance(sixP);
             if (six) ret = 100 - spotForDef;
-            const t = record({ kind: KIND.INT, yards: air, a: qbRef, b: tRef, x: ref(def, hawk), extra: ret, flags: FLAG.TURNOVER | (six ? FLAG.RETURN_TD | FLAG.TD : 0) | (ctx.hail ? FLAG.HAIL_MARY : 0) });
+            const drama = !W ? 0 : (clutchOf(hawk) >= CLUTCH_STAR ? FLAG.CLUTCH : 0) | (clutchOf(u.qb) <= CHOKE_LINE ? FLAG.CHOKE : 0);
+            const t = record({ kind: KIND.INT, yards: air, a: qbRef, b: tRef, x: ref(def, hawk), extra: ret, flags: FLAG.TURNOVER | (six ? FLAG.RETURN_TD | FLAG.TD : 0) | (ctx.hail ? FLAG.HAIL_MARY : 0) | drama });
+            if (!six) bump(def, 3);
             tick(ret > 25 ? 9 : 6, true, side);
             endPossession();
             if (six) {
@@ -936,9 +1113,9 @@ export function playGame(home, away, opts = {}) {
         return best.b;
     }
 
-    function runPlay(side, def, u, dfn) {
+    function runPlay(side, def, u, dfn, ctx = {}) {
         const toGoal = 100 - g.yl;
-        const designed = u.qbDesigned > 0 && chance(u.qbDesigned);
+        const designed = !ctx.fake && u.qbDesigned > 0 && chance(u.qbDesigned);
         const back = designed ? null : nextBack(u);
         const carrier = designed ? u.qb : back ? back.p : u.qb;
         const line = S(side, carrier);
@@ -956,9 +1133,12 @@ export function playGame(home, away, opts = {}) {
         else yds = gaussian(baseMean, 2.4);
         if (toGoal <= 4) yds += 0.2 + (back?.goalLine || 0);
         if (shortYardage) yds += 0.35;
+        yds += 0.1 * moEdge(side);
+        if (ctx.fake) yds += 3; // nobody saw it coming
         yds = Math.round(clamp(yds, -6, toGoal));
 
-        const fumble = yds < toGoal && chance(back ? back.fumble : 0.009);
+        const cC = clutchNow(carrier);
+        const fumble = yds < toGoal && chance((back ? back.fumble : 0.009) * (1 - 0.45 * cC));
         const lost = fumble && chance(0.5);
         if (line) { line.carries++; line.rushYards += yds; if (fumble) line.fumbles++; }
         team[side].rushAtt++; team[side].rushYds += yds;
@@ -970,8 +1150,10 @@ export function playGame(home, away, opts = {}) {
             creditTackle(def, dfn.runTacklers, tackler);
             if (yds < 0 && tackler) { const l = S(def, tackler); if (l) l.tfl++; flags |= FLAG.TFL; }
         }
-        if (lost) flags |= FLAG.FUMBLE | FLAG.TURNOVER;
+        if (lost) flags |= FLAG.FUMBLE | FLAG.TURNOVER | (inWitching() && clutchOf(carrier) <= CHOKE_LINE ? FLAG.CHOKE : 0);
+        if (inWitching() && (td || (g.goingForIt && yds >= g.togo)) && clutchOf(carrier) >= CLUTCH_STAR) flags |= FLAG.CLUTCH;
         const t = record({ kind: KIND.RUN, yards: yds, a: ref(side, carrier), x: ref(def, tackler), flags });
+        if (!td && yds >= 15) bump(side, 1);
         g.yl += yds;
         if (td) {
             if (line) { line.rushTds++; line.tds++; }
@@ -994,6 +1176,7 @@ export function playGame(home, away, opts = {}) {
     // The defense has the ball after a fumble. Some are scooped and scored.
     function fumbleReturn(def, tuple, forcer) {
         endPossession();
+        bump(def, 3);
         const d = teams[def].depth;
         const recoverer = forcer && chance(0.35) ? forcer : (d.front7.length ? d.front7[Math.floor(Math.random() * d.front7.length)] : forcer);
         tuple[14] = ref(def, recoverer);
@@ -1068,5 +1251,6 @@ export function playGame(home, away, opts = {}) {
         names,
         form: form.map(f => ({ off: Math.round(f.off * 10) / 10, def: Math.round(f.def * 10) / 10 })),
         plans: plans.map(p => p.label),
+        witching: g.witch,
     };
 }

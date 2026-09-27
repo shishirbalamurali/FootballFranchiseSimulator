@@ -114,6 +114,12 @@
   --turf-line:   rgba(255, 250, 240, 0.55);
   --pigskin:     #8a4f24;
   --first-down:  #ffd23f;
+  /* The Witching Hour: the field goes to night, lit in violet */
+  --turf-night:        #1d3a2c;
+  --turf-night-stripe: #19332a;
+  --witch:             #9b6bff;
+  --witch-glow:        rgba(155, 107, 255, 0.45);
+  --wp-home-fill:      rgba(255, 250, 240, 0.08);
 
   /* Pattern tiles (SVG data URIs, rebuilt per team) */
   --pattern-image: none;

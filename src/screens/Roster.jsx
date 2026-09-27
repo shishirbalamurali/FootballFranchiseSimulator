@@ -5,6 +5,13 @@ import { TEAMS } from '../data/teams';
 import PlayerModal from '../components/PlayerModal';
 import PlayerFace from '../components/PlayerFace';
 import { characterFor, TRAITS, teamContext, moodFor, contractStance } from '../engine/character';
+import { playStyleFor } from '../engine/playStyles';
+
+/** "🔥 Burner" — the signature play style, falling back to the archetype. */
+const styleText = p => {
+  const s = playStyleFor(p);
+  return s ? `${s.icon} ${s.label}` : p.archetype;
+};
 import {
   PageHeader, Card, CardHeader, CardBody, Button, DataTable, Tabs,
   SegmentedControl, FilterChips, Badge, PositionTag, RarityChip, Meter,
@@ -152,7 +159,7 @@ function PlayerTile({ player, onOpen, selected, onSelect }) {
           </p>
           <div className="mt-1.5 flex items-center gap-1.5">
             <PositionTag position={player.position} />
-            <span className="truncate text-label text-fg-muted">{player.archetype}</span>
+            <span className="truncate text-label text-fg-muted" title={player.archetype}>{styleText(player)}</span>
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -256,7 +263,7 @@ export default function Roster() {
               <TraitIcons player={p} />
               <UnhappyFlag player={p} ctx={teamCtx} />
             </p>
-            <p className="truncate text-label text-fg-muted">#{characterFor(p).number} · {p.archetype}</p>
+            <p className="truncate text-label text-fg-muted" title={p.archetype}>#{characterFor(p).number} · {styleText(p)}</p>
           </div>
         </div>
       ),

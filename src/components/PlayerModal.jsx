@@ -3,6 +3,7 @@ import { TEAMS } from '../data/teams';
 import { useGameStore } from '../store/gameStore';
 import { characterFor, personalityView, moodFor, teamContext, contractStance } from '../engine/character';
 import PlayerFace from './PlayerFace';
+import { playStyleFor } from '../engine/playStyles';
 import {
   Modal, Tabs, Button, Badge, TeamCrest, PositionTag, RarityChip,
   Stat, StatRow, EmptyState, getRarity, cx,
@@ -209,6 +210,7 @@ export default function PlayerModal({ player, teamId, onClose }) {
   const canEdit = displayTeamId !== 'FA';
   const rarity = getRarity(livePlayer.ovr);
   const character = characterFor(livePlayer);
+  const style = playStyleFor(livePlayer);
   const own = displayTeamId === userTeamId;
   const view = personalityView(livePlayer, { own });
   // Mood needs his team's situation; free agents have none, so no reasons.
@@ -260,6 +262,7 @@ export default function PlayerModal({ player, teamId, onClose }) {
             <span className="font-display text-h2 leading-none tabular-nums text-fg-muted">#{character.number}</span>
             <PositionTag position={livePlayer.position} />
             <span className="text-label text-fg-muted">{livePlayer.archetype}</span>
+            {style && <Badge tone="info" title={style.blurb}>{style.icon} {style.label}</Badge>}
             {livePlayer.devTrait && livePlayer.devTrait !== 'Normal' && (
               <Badge tone={livePlayer.devTrait === 'Superstar' ? 'positive' : 'warning'}>
                 {livePlayer.devTrait}
@@ -269,6 +272,7 @@ export default function PlayerModal({ player, teamId, onClose }) {
           <p className="truncate text-label text-fg-secondary">
             {character.height} · {character.weightLb} lb · Age {livePlayer.age} · {character.hometown} · {character.college}
           </p>
+          {style && <p className="text-label italic text-fg-muted">Play style — {style.blurb}</p>}
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={TONE_BADGE[mood.tone]}>{mood.icon} {mood.label}</Badge>
             {view.traits.map(t => (
