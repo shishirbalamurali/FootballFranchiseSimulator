@@ -156,10 +156,23 @@ try {
     store.getState().foFAVisit(store.getState().freeAgents[0].id);
     assert.equal(store.getState().foAdvance(), 'prodays');
     assert.equal(store.getState().foAdvance(), 'draft');
+    const preDraftRosters = store.getState().rosters;
     const order = store.getState().draftOrder;
     assert.ok(order.every(o => o.year === store.getState().year + 1));
     assert.equal(new Set(order.map(o => `${o.originalTeamId}:${o.round}:${o.comp || 0}`)).size, order.length);
     assert.equal(store.getState().foAdvance(), 'udfa');
+    {
+        // Mock drafts track the real draft, but boards disagree enough for reaches and steals.
+        const st2 = store.getState();
+        const full = [...st2.draftHistory.map(h => h.player), ...st2.draftClass];
+        const cons = S.mockDraft(full, st2.draftOrder.map(o => o.teamId), preDraftRosters);
+        const r1 = st2.draftHistory.filter(h => h.round === 1 && h.teamId !== user);
+        const off = r1.map(h => Math.abs(h.pickNumber - cons.get(h.player.id).rank)).sort((a, b) => a - b);
+        const median = off[Math.floor(off.length / 2)];
+        console.log('R1 consensus distance: median', median, 'far (>8):', off.filter(d => d > 8).length);
+        assert.ok(median <= 6, `the mock draft predicts round one (median miss ${median})`);
+        assert.ok(off.filter(d => d > 8).length >= 3, 'some reaches and steals');
+    }
     const userPicks = store.getState().draftHistory.filter(h => h.teamId === user);
     assert.ok(userPicks.length >= 5);
     assert.ok(userPicks.every(h => store.getState().rosters[user].find(p => p.id === h.player.id)?.scoutedAs), 'rookies remember how we graded them');

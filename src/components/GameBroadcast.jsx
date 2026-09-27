@@ -10,6 +10,7 @@ import {
 } from '../engine/gameStory';
 import { TeamCrest, Button, cx, alpha, onColor } from './ui';
 import PlayerFace from './PlayerFace';
+import { abilityFor } from '../engine/xFactor'; // CLAUDE: X-Factor zone
 
 // "Watch our game": the user's game as a live broadcast, built from the
 // engine's real play-by-play. Every snap moves the ball on the field; the big
@@ -489,6 +490,15 @@ export default function GameBroadcast({ game, title, others = [], duration = 280
     return { leaders: [leadersFor(lines, 0), leadersFor(lines, 1)], feed: feed.reverse().slice(0, 7) };
   }, [plays, descs, shownIdx, model.driveEnding]);
 
+  // X-Factor zone: activation/deactivation events logged by the engine.
+  const xfEvents = useMemo(() => (game.pbp?.xf || []).map(([q, clk, side, id, ev]) => ({ t: elapsedAt(q, clk), side, id, ev })), [game.pbp]);
+  const rosters = useGameStore(s => s.rosters);
+  const xfPlayers = useMemo(() => {
+    const out = {};
+    for (const tid of [game.homeTeamId, game.awayTeamId]) for (const p of rosters?.[tid] || []) if (p.xFactor) out[p.id] = { p, ability: abilityFor(p) };
+    return out;
+  }, [rosters, game.homeTeamId, game.awayTeamId]);
+
   if (!play) return null;
   const scoreSrc = shownIdx >= 0 ? plays[shownIdx] : null;
   const score = final ? [game.homeScore, game.awayScore] : scoreSrc ? [scoreSrc.hs, scoreSrc.as] : [0, 0];
@@ -501,6 +511,14 @@ export default function GameBroadcast({ game, title, others = [], duration = 280
   const situation = play.down >= 1 && play.down <= 4
     ? `${downText(play.down, play.togo, play.yl)} · ${spotText(play.yl, abbr[play.off], abbr[1 - play.off])}` : '';
   const elapsedNow = final ? Infinity : elapsedAt(play.q, clock);
+  const zoneNow = {};
+  let lastZone = null;
+  for (const e of xfEvents) {
+    if (e.t > elapsedNow) break;
+    if (e.ev === 'zone') { zoneNow[e.id] = e; lastZone = e; } else if (e.ev === 'off' || e.ev === 'countered') delete zoneNow[e.id];
+  }
+  const zoneFlash = !final && !intro && lastZone && elapsedNow - lastZone.t <= 45 && xfPlayers[lastZone.id] ? xfPlayers[lastZone.id] : null;
+  const inZone = Object.values(zoneNow).map(e => xfPlayers[e.id]).filter(Boolean);
 
   return createPortal(
     <motion.div
@@ -521,6 +539,11 @@ export default function GameBroadcast({ game, title, others = [], duration = 280
           </div>
         </header>
 
+        {inZone.length > 0 && !final && (
+          <div className="flex shrink-0 flex-wrap gap-1.5" aria-live="polite">
+            {inZone.map(z => <span key={z.p.id} className="xf-chip animate-zone-pulse rounded-full border-2 border-ink px-2.5 py-0.5 text-micro uppercase">⚡ {z.p.name} in the zone · {z.ability?.triggerShort}</span>)}
+          </div>
+        )}
         <div className="shrink-0">
           <Scorebug teams={teams} abbr={abbr} score={score} q={final ? (game.overtime ? 5 : 4) : play.q} clock={clock}
             poss={play.off} userSide={userSide} final={final} />
@@ -532,6 +555,11 @@ export default function GameBroadcast({ game, title, others = [], duration = 280
             <div className="relative min-h-[120px] flex-1">
               <Field plays={plays} idx={idx} f={f} teams={teams} abbr={abbr} drive={drive} />
               {showCallout && <Callout play={play} desc={desc} teams={teams} keyId={idx} />}
+              {zoneFlash && (
+                <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center">
+                  <span key={lastZone.t} className="xf-chip animate-bounce-in rounded-full border-[3px] border-ink px-4 py-1.5 font-display text-h2 uppercase shadow-2">⚡ Zone · {zoneFlash.p.name.split(' ').slice(-1)[0]} · {zoneFlash.ability?.name}</span>
+                </div>
+              )}
               {seg?.brk && !final && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
                   <span key={seg.brk} className="toon-sticker animate-bounce-in text-h1 uppercase">{seg.brk} · {abbr[1]} {score[1]} – {abbr[0]} {score[0]}</span>

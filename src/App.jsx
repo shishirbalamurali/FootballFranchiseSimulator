@@ -15,7 +15,7 @@ import TeamSelect from './screens/TeamSelect';
 import HomeHub from './screens/HomeHub';
 import Standings from './screens/Standings';
 import Roster from './screens/Roster';
-import Draft from './screens/Draft';
+import DraftRoom from './screens/draft/DraftRoom';
 import Schedule from './screens/Schedule';
 import Stats from './screens/Stats';
 import Playoffs from './screens/Playoffs';
@@ -266,7 +266,7 @@ export default function App() {
       case 'playbook':   return <Playbook />;
       case 'trade':      return <TradeMachine />;
       case 'draft':
-        return <Draft onNavigate={setCurrentScreen} />;
+        return <DraftRoom onNavigate={setCurrentScreen} />;
       case 'playoffs':
         return (
           <Playoffs

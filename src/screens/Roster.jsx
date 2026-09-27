@@ -3,6 +3,9 @@ import { useGameStore } from '../store/gameStore';
 import { POSITIONS } from '../engine/player';
 import { TEAMS } from '../data/teams';
 import PlayerModal from '../components/PlayerModal';
+import { playerStatus } from '../engine/playerStatus'; // CLAUDE: status-first rows
+import { isActiveXF } from '../engine/xFactor';
+import { StatusPill } from '../components/player/PlayerBits';
 import PlayerFace from '../components/PlayerFace';
 import { characterFor, TRAITS, teamContext, moodFor, contractStance } from '../engine/character';
 import {
@@ -194,6 +197,9 @@ export default function Roster() {
   const cutPlayer = useGameStore(s => s.cutPlayer);
   const resignPlayer = useGameStore(s => s.resignPlayer);
   const toast = useToast();
+  const rosterInjuries = useGameStore(s => s.injuries); // CLAUDE
+  const rosterWeek = useGameStore(s => s.week);
+  const rosterFO = useGameStore(s => s.frontOffice);
 
   const [view, setView] = useState('roster');
   const [density, setDensity] = useState('table');
@@ -240,6 +246,8 @@ export default function Roster() {
     setResignYears(2);
   };
 
+  const statusById = useMemo(() => Object.fromEntries(roster.map(p => [p.id, playerStatus(p, { own: true, roster, injuries: rosterInjuries, week: rosterWeek, block: rosterFO?.block, tradeRequests: rosterFO?.tradeRequests, holdouts: rosterFO?.holdouts })])), [roster, rosterInjuries, rosterWeek, rosterFO]);
+
   const columns = [
     {
       id: 'position', header: 'Pos', width: '64px', accessor: p => p.position,
@@ -253,10 +261,13 @@ export default function Roster() {
           <div className="min-w-0">
             <p className="flex min-w-0 items-center gap-1.5">
               <span className="truncate font-semibold text-fg">{p.name}</span>
+              {isActiveXF(p) && <span className="xf-chip rounded-full border border-ink px-1 text-micro" title="X-Factor">⚡</span>}
               <TraitIcons player={p} />
               <UnhappyFlag player={p} ctx={teamCtx} />
             </p>
-            <p className="truncate text-label text-fg-muted">#{characterFor(p).number} · {p.archetype}</p>
+            {statusById[p.id]?.primary.rank < 10
+              ? <StatusPill status={statusById[p.id].primary} className="mt-0.5 max-w-full truncate" />
+              : <p className="truncate text-label text-fg-muted">#{characterFor(p).number} · {p.archetype}</p>}
           </div>
         </div>
       ),
