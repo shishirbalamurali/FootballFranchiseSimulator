@@ -1,405 +1,550 @@
-# Front Office Overhaul — plan
+# Front Office Overhaul — plan v2
 
-Drafts · scouting · college storylines · trades · free agency · coaching trees.
-Status: **plan only, no code yet.** Written 2026-09-27 from a read of the current source.
-Coordination follows `AGENTS.md` (file ownership, Board, store fences). Section 13 splits the work.
+Drafts · scouting · college storylines · trades · free agency · coaching trees ·
+**player cards** · **X-Factor players**.
+Status: **plan only, no code yet.** v1 2026-09-27; v2 the same day expands mechanics and UI
+and adds §10 (player card) and §11 (X-Factor). Coordination follows `AGENTS.md`; §17 splits the work.
 
 ---
 
-## 0. The pitch in one paragraph
+## 0. The pitch
 
-Today these six systems are separate screens with separate rules: you scout by spending
-10 points to reveal a number, draft from a list, trade against a value chart you can re-roll,
-sign free agents in a 4-day market, and watch a coaching list update once a year. The overhaul
-turns them into **one front-office loop that runs all year**. The loop has one currency,
-**information**, and one output, **stories you remember**. You follow a sophomore at a small school
-because your area scout loves him. He breaks out, declares early, and a rival's GM — your old
-coordinator — trades up two spots to take him one pick before you. Three years later he asks
-that team for a trade, and your scout was right. Every mechanic below exists to make that sentence possible,
-cheap to play (≤ 60–90 s per offseason stage when delegated), and honest about uncertainty.
+Today these systems are separate screens with separate rules: you scout by spending 10 points
+to reveal a number, draft from a list, trade against a value chart you can re-roll, sign free agents
+in a 4-day market, and watch a coaching list update once a year. Player cards show every badge at once
+and don't tell you what matters about the player *right now*.
+
+The overhaul turns this into **one front-office loop that runs all year**. Its currency is
+**information**, and its output is **stories you remember**, told through **player cards that show
+status first** and a tiny tier of **X-Factor players whose one-of-a-kind abilities change games**.
+
+> You follow a sophomore at a small school because your area scout loves him. He breaks out,
+> declares early, and a rival GM — your old coordinator — trades up two spots to take him one pick
+> before you. Three years later he's an X-Factor with an ability nobody else has, and his card
+> glows gold when he's in the zone against you in the playoffs. He asks that team for a trade,
+> and your scout was right.
+
+Every mechanic below exists to make that paragraph possible, to be **cheap to play** (≤ 60–90 s
+per offseason stage when delegated), and to be **honest about uncertainty**.
 
 ## 1. Design pillars
 
-1. **Fog of war is the game.** You never see a prospect's or opponent's true ratings. You see
-   *your staff's opinion*, with a confidence range that narrows when you invest. Different
-   teams believe different things. That is why steals, busts, reaches, and trade-ups happen.
-2. **People, not tables.** Scouts, coaches, GMs, and prospects are persistent people with names,
-   biases, histories, and relationships (mentor trees, college teammates, former players).
-   Every system reads and writes those relationships.
-3. **Every choice costs something.** Scouting time is finite. Cap space comes with dead money.
-   Trade value is judged by *this* partner's needs and mode. Promoting a coordinator loses him.
-   No "click for a free +2".
-4. **Honest drama.** Storylines trigger from real state (stats, depth charts, standings),
-   resolve exactly once, and adapt when a player is traded, injured, or cut. Nothing contradicts the sim.
-5. **Efficient to play.** Every stage has *Delegate*, *Recommend*, and *Do it myself*.
-   Batch actions. At most one decision modal per stage. Instant-sim is always available.
-6. **Cheap to save.** Derive from ids and seeds (the `character.js` pattern) and store only
-   decisions and deltas. Section 8 sets a hard save budget.
+1. **Fog of war is the game.** You never see a prospect's true ratings (or a rival player's hidden
+   trajectory). You see *your staff's opinion* with a confidence range that narrows when you invest.
+   Every team believes something different, which is why steals, busts, reaches and trade-ups happen.
+2. **People, not tables.** Scouts, coaches, GMs, agents and prospects are persistent people with
+   names, biases, histories and relationships. Every system reads and writes those relationships.
+3. **Every choice costs something.** Scouting time is finite. Cap space comes with dead money. Trade
+   value is judged by *this* partner's needs. Promoting a coordinator loses him. There's no free +2.
+4. **Status first.** Every player surface answers "what's going on with him, and what should I do?"
+   before it shows numbers. Detail is one tap away, never in the way.
+5. **Rare means rare.** X-Factor is ≤ 1% of the league. Each ability is unique, readable in one line,
+   visible when it fires, capped in impact, and it can be countered.
+6. **Honest drama.** Storylines and abilities trigger from real sim state, resolve exactly once, and
+   adapt to trades, injuries and cuts. Nothing contradicts the box score.
+7. **Efficient to play.** Every stage offers *Delegate* (the assistant does it), *Recommend* (it
+   pre-fills and you confirm) or *Do it myself*. Batch actions. At most one decision modal per stage.
+8. **Cheap to save.** Derive from ids and seeds (the `character.js` pattern) and store only decisions
+   and deltas. §15 sets a hard save budget.
 
 ## 2. What exists today (verified against the source)
 
 | System | Where | What it does | Main problems |
 |---|---|---|---|
-| College | `engine/collegePipeline.js`, `collegeProduction.js`, `screens/FranchiseOffice.jsx` `CollegeWatch` | 1,400 players, 4 cohorts, tiers, deterministic game stats, 2 story events per season (wk 12, wk 18) from a 12-way arc hash | Four fixed arc labels (`i % 4`); no schools, conferences, or standings; no awards, early declarations, transfers, or bowl games; stories are one line each; the UI is a paginated card grid showing stats as `KEY: v` strings; follows are disconnected from the draft watchlist |
-| Scouting | store `scoutingPoints` / `scoutedProspects`, `Draft.jsx` `getOvrRange` | 10 points, reset at `startFreeAgency`; 1 point reveals exact OVR/POT/attributes | **Leaks truth**: `getOvrRange` seeds on `id.charCodeAt(0)+charCodeAt(2)`, which is the same for every `college-…` id, so every range sits at the same offset from true OVR. `grade` (visible unscouted, sortable) is `ovr*.45 + ceiling*.55`. Scouting is binary, available only in the offseason, and there are no scouts |
-| Draft | `engine/draft.js`, `draftExperience.js`, store `startDraft`/`makePick`/`simOneCpuPick`, `Draft.jsx` (943 lines), `DraftTradeDesk.jsx` | 7 rounds, CPU style weights, 18% CPU trade-ups, user pick trades at 103% chart value, 90 s clock | Only current-year picks exist (`draftPickOwners` reset in `finalizeDraft`; `pickKey` has a `year` slot that is never set). Two different pick-value charts (`tradeLogic.getPickValue` vs `draftExperience.pickValue`). Timer auto-pick in the store takes the highest *true* OVR (the UI says "best fit"). CPU boards all share the true grade, so there are no real reaches or steals. No combine or pro day events, no interviews or medicals, no UDFA scramble, no rookie 5th-year option. `draftExperience.collegeProfile` is a leftover `Math.random` path |
-| Trades | `screens/tradeLogic.js`, store `executeTrade`/`maybeGenerateCPUTradeOffer`/`acceptTradeOffer`, `engine/leagueTrades.js`, `TradeCenter.jsx` | Value = OVR curve × position × age × dev × contract; CPU accepts at ratio ≥ 0.9 after `0.88–1.06` random variance | **Re-roll exploit**: variance is redrawn on every Propose click. No cap check in `executeTrade`. No future picks, counter-offers, trade block, or "what would it take". Team mode is inferred from overall rating only. Incoming CPU offers pick a random team, target a random 78+ player, run at 18%/week, and allow one pending offer. League trades are 1:1 swaps, max one per week |
-| Free agency | `engine/faMarket.js` (Claude, K6), `screens/freeAgencyLogic.js` (legacy), `FreeAgency.jsx` | 4-day market, suitors, floors, `faPreferences` personality weighting | Contracts are `{salary, years}` only: no guarantees, bonus, or dead money, so cutting is free. No franchise tag, RFA/ERFA, or compensatory picks. Re-signing is a separate screen flow with no deadline pressure. Legacy `freeAgencyLogic.evaluateOffer` still exists |
-| Coaching trees | `engine/franchiseStaff.js`, store `hireStaff`/`fireStaff`/`upgradeStaff`, `CoachingStaff` UI | 4 roles × 32 teams + market; reputation, 3 skill branches (0–3), `mentorId`, history; yearly carousel | Coaches have no scheme, age, contract, or personality. Bonuses are flat. The tree exists only as `mentorId`: there is no visualization, no tree reputation, and no scheme inheritance. User coordinators are never poached for HC jobs, so there's no "my guy got promoted" moment. No scouting or position staff |
+| College | `engine/collegePipeline.js`, `collegeProduction.js`, `FranchiseOffice.jsx` `CollegeWatch` | 1,400 players in 4 cohorts, tiers, deterministic game stats, 2 story events a season (wk 12, wk 18) | Four fixed arc labels (`i % 4`). No schools, standings, awards, early declarations or transfers. One-line stories. Paginated card grid with stats shown as `KEY: v`. Following a college player is separate from the draft watchlist |
+| Scouting | store `scoutingPoints`/`scoutedProspects`, `Draft.jsx` `getOvrRange` | 10 points, reset at `startFreeAgency`; 1 point reveals exact OVR/POT/attributes | **Leaks the truth**: `getOvrRange` seeds on `id.charCodeAt(0)+charCodeAt(2)`, which is constant for every `college-…` id, so every range has the same offset from true OVR. The visible, sortable `grade` = `ovr*.45 + ceiling*.55`. Binary, offseason only, no scouts |
+| Draft | `engine/draft.js`, `draftExperience.js`, store `startDraft`/`makePick`/`simOneCpuPick`, `Draft.jsx` (943 lines), `DraftTradeDesk.jsx` | 7 rounds, CPU style weights, 18% CPU trade-ups, user pick trades at 103% of chart value, 90 s clock | Only current-year picks exist (`draftPickOwners` reset in `finalizeDraft`; `pickKey`'s `year` is never set). Two pick-value charts that disagree. Timer auto-pick takes the highest *true* OVR. Every CPU board shares the true grade, so there are no real reaches. No combine, pro day, interviews, medicals, UDFA scramble or 5th-year option. A `Math.random` `collegeProfile` path is left over |
+| Trades | `screens/tradeLogic.js`, store `executeTrade`/`maybeGenerateCPUTradeOffer`/`acceptTradeOffer`, `engine/leagueTrades.js`, `TradeCenter.jsx` | Value = OVR curve × position × age × dev × contract; CPU accepts at a ratio ≥ 0.9 after `0.88–1.06` random variance | **Re-roll exploit**: the variance is redrawn on every Propose click. **No cap check** in `executeTrade`. No future picks, counters, trade block, conditional picks or "what would it take". Team mode is inferred from overall rating only. Incoming offers: a random team, 18%/week, one at a time. League trades: 1:1 swaps, one a week. `devTrait === 'Superstar X-Factor'` in `getPlayerValue` never matches any real player |
+| Free agency | `engine/faMarket.js` (Claude, K6), `screens/freeAgencyLogic.js` (legacy), `FreeAgency.jsx` | 4-day market, suitors, floors, personality weighting | Contracts are `{salary, years}` only, with no guarantees, bonus or dead money (cutting is free). No tags, RFA or comp picks. Re-signing has no deadline pressure. The legacy random `evaluateOffer` still exists |
+| Coaching trees | `engine/franchiseStaff.js`, store `hireStaff`/`fireStaff`/`upgradeStaff`, `CoachingStaff` UI | 4 roles × 32 teams plus a market; reputation, 3 skill branches, `mentorId`, history; a yearly carousel | Coaches have no scheme, age, contract or personality. Bonuses are flat. The tree is only `mentorId`, with no view and no prestige. User coordinators are never poached. No scouting or position staff |
+| Player card | `components/PlayerModal.jsx` (392 lines), `PlayerIdentity.jsx`, `ui/rarity` | Header: rarity wash, dev badge, mood badge, every public trait badge, "🔒 +N unknown", POT/cap/years tiles, OVR + change. Tabs: Character (default) / Attributes / Statistics | **Cluttered and status-blind**: 6–10 chips before any content. Injury, depth role, walk year, holdout and trade request aren't in the header. The accent colour comes from OVR rarity, not situation. No quick actions. Personality is the default tab even for a player you only want to check is healthy. No compact variant, so rows, trade chips and draft cards each re-implement bits of it |
+| Dev tiers | `engine/player.js` `DEV_TRAITS` (Superstar/Star/Normal/Slow), `progression.js` | Dev trait scales growth; rare promotions | Dev trait affects only progression, never the game itself. There's no elite tier with in-game identity |
 
 Other context that shapes the plan:
 - The offseason runs `playoffs → startOffseason (progression, expiry, carousel) → freeAgency (4-day market) → draft → regular`.
-- `character.js` (Claude) already provides derived personalities, `contractStance`, `tradeFallout`, `wantsOut`, `faPreferences`, and fog-aware `personalityView`. Reuse it; don't rebuild it.
-- `owner.js` goals, `legacy.js` achievements, `rivalries.js`, `franchiseLore.js`, and `weeklyExperience.js` are hook points for callbacks.
-- Save size was already 2.2 MB at week 4 of season 1 (Board FYI). Every new field must justify its bytes.
+- `character.js` (Claude) already derives personality, `moodFor`, `contractStance`, `tradeFallout`, `wantsOut`, `faPreferences` and a fog-aware `personalityView`. Reuse all of it.
+- `gameEngine.js` (Claude, K11) is snap-by-snap, with `buildOffense`/`buildDefense` probability terms, game-day `form`, `pbp` and `scoringLog`. It is the natural home for ability hooks.
+- `owner.js`, `legacy.js`, `rivalries.js`, `franchiseLore.js`, `weeklyExperience.js` and `gameStory.js` are callback points.
+- Save size was already 2.2 MB at week 4 of season 1. Every new field must justify its bytes.
 
-## 3. Shared foundations (build first; everything else depends on them)
+---
 
-### F1. Offseason calendar (`engine/offseasonCalendar.js`)
-Replace the three-phase jump with an explicit, resumable stage machine. Each stage has
-`enter(state)`, `autoResolve(state, delegation)`, `canAdvance(state)` and a UI panel.
+## 3. Shared foundations (build first)
+
+### F1. Offseason calendar — `engine/offseasonCalendar.js`
+Replace the three-phase jump with an explicit, resumable stage machine. Each stage defines
+`enter(state)`, `autoResolve(state, delegation)`, `canAdvance(state)`, a *headline* and a UI panel.
 
 ```
-SEASON END ─► Awards & Carousel ─► Re-sign / Tag window ─► Combine ─► Free Agency (4 days)
-          ─► Pro Days & Visits ─► DRAFT (3 nights) ─► UDFA scramble ─► Camp cuts ─► Week 1
-In season: weekly scouting assignments · college Saturdays · trade window (deadline wk 11)
+SEASON END ─► Awards night ─► Black Monday (carousel) ─► Re-sign & Tag window ─► Combine
+   ─► Free Agency (4 days) ─► Pro days & visits ─► DRAFT (3 nights) ─► UDFA scramble
+   ─► Camp reveal ─► Cut-down day ─► Week 1
+IN SEASON: weekly scouting assignments · college Saturdays · trade window (deadline day wk 11)
 ```
-- `phase` stays for compatibility. The new field is `offseason: { stage, stageData }`, and old saves map `offseason→resign`, `freeAgency→fa`, and `draft→draft`.
-- The UI is one **Offseason Command Center** (§11). The top bar's `nextAction` from `navigation.js` points to the current stage.
-- *Advance* on any stage runs `autoResolve` for everything left undone, using delegation settings and the Front Office Assistant.
+- `phase` stays for compatibility. The new field is `offseason: { stage, stageData }`, and old saves map `offseason → resign`, `freeAgency → fa`, `draft → draft`.
+- Each stage has a **headline card** ("Black Monday: 6 head coaches fired, your OC interviewing in Denver") so advancing feels like an event, not a menu.
+- *Advance* on any stage runs `autoResolve` for everything left undone, using the delegation settings.
 
-### F2. One value model (`engine/assetValue.js`)
-- **One pick chart**, used by the draft desk, trades, and CPU logic. Future picks are valued at the
-  *projected* slot (from current team strength), discounted 15% per year out, with a
-  variance premium for the next year's picks from bad teams.
-- **Player surplus value** = on-field value over the contract years − cap cost. Cheap good players
-  are the most valuable assets, and that is what makes rebuilds interesting.
-- **Team mode** per club: `contend | retool | rebuild`. Derived from roster age curve, QB situation,
-  cap, record, and owner archetype. Stored as one string per team, recomputed weekly.
-- **Perceived value**: `value(asset, forTeam)` = base × need fit × scheme fit (F4) × mode weight
-  (a rebuilder weights picks and youth ×1.3; a contender weights current OVR ×1.3).
-- Replaces `getPlayerValue`/`getPickValue`/`pickValue`; keep thin re-exports for one release.
+### F2. One value model — `engine/assetValue.js`
+- **One pick chart** for the draft desk, trades and CPU logic. Future picks are valued at the *projected* slot (from current team strength), discounted 15% per year out, with a variance premium for picks from bad teams.
+- **Surplus value** = on-field value over the contract years − cap cost. Cheap good players are the most valuable assets, which makes rebuilds interesting.
+- **Team mode**: `contend | retool | rebuild`, derived weekly from age curve, QB, cap, record and owner archetype.
+- **Perceived value** `value(asset, forTeam)` = base × need fit × scheme fit (F4) × mode weight × X-Factor premium (§11) × knowledge discount (a team pays less for a player it hasn't scouted).
+- Replaces `getPlayerValue`/`getPickValue`/`pickValue`, with thin re-exports kept for one release.
 
-### F3. Contract model v2 (`engine/contracts.js`)
-- `contract: { salary, years, yearsLeft, guaranteed, bonus, signedYear, type }` where `type` ∈
-  `rookie | veteran | tag | minimum`. **Cap hit** = salary + prorated bonus. **Dead money** on a cut or trade =
-  remaining prorated bonus + remaining guarantee. It goes on `deadCap[teamId][year]`.
-- Rookie scale by slot (existing formula); 1st-rounders get a **5th-year option** decision.
-- **Franchise tag** (1/team/year, price = average of the position's top 5) and **transition tag**.
-- Defaults for old saves: `guaranteed = 0`, `bonus = 0`, `type = 'veteran'`. Cap math is unchanged until a
-  player signs a new deal, so there's no economy shock.
-- Codex owns the cap enforcement touchpoints (`cpuRosterManagement`, `leagueRules`).
+### F3. Contract model v2 — `engine/contracts.js`
+- `contract: { salary, years, yearsLeft, guaranteed, bonus, signedYear, type }`, where `type` ∈ `rookie | veteran | tag | minimum | tender`.
+- Cap hit = salary + prorated bonus. **Dead money** on a cut or trade = remaining proration + remaining guarantee, stored in `deadCap[teamId][year]`.
+- Rookie scale by slot, a **5th-year option** for 1st-rounders, **franchise/transition tags**, **RFA tenders**, and **incentives** (one per deal: "+$2M if 10+ sacks"). Incentives count against next year's cap only if earned.
+- Old saves default `guaranteed = 0, bonus = 0, type = 'veteran'`. Cap math is unchanged until the player signs a new deal.
 
-### F4. Scheme identity (`engine/schemes.js`)
-- 4 offensive schemes (Air Raid, West Coast, Power Run, Spread Option) and 4 defensive (4-3 Over,
-  3-4 Two-Gap, Nickel Press, Cover-2 Zone), each with attribute weights per position.
-- `schemeFit(player, scheme) → 0–100`. It drives the prospect "fit" column, trade perceived value,
-  FA interest, and a small in-game efficiency modifier through `gamePlan.js` (already Claude's).
-- A team's scheme comes from its **HC/OC/DC** (F5), so changing coordinators changes which players fit.
-  That makes coaching hires roster decisions.
+### F4. Scheme identity — `engine/schemes.js`
+- 4 offensive schemes (Air Raid, West Coast, Power Run, Spread Option) and 4 defensive (4-3 Over, 3-4 Two-Gap, Nickel Press, Cover-2 Zone). Each has per-position attribute weights and a small in-game tilt through `gamePlan.js`.
+- `schemeFit(player, scheme) → 0–100` drives the prospect Fit column, trade perceived value, FA interest, player-card role text and some X-Factor ability eligibility.
+- A team's scheme comes from its HC, OC and DC (F5). **Hiring a coordinator is a roster decision.**
 
-### F5. People registry (`engine/people.js`)
-One lightweight shape for coaches, scouts, and GMs: `{ id, name, role, teamId, age, rep, traits[], scheme?, mentorId, history[] }`.
-CPU GMs exist so rival front offices have names and tendencies (aggressive trader, draft-and-develop,
-analytics, old-school). GM behavior parameterizes the CPU draft, trade, and FA AI.
+### F5. People registry — `engine/people.js`
+One lightweight shape for coaches, scouts, GMs and agents:
+`{ id, name, role, teamId, age, rep, traits[], scheme?, mentorId, history[] }`, with faces through `PlayerFace`.
+CPU GMs have archetypes (Aggressive trader, Draft-and-develop, Analytics, Old school, Big spender, Cap hawk) that parameterize their draft, trade and FA AI. A handful of **agents** represent free agents and add a negotiation personality.
 
-### F6. Storyline engine (`engine/storyArcs.js`)
-Generalizes `weeklyExperience.js` arcs. An **arc template** has `eligible(state) → subjects`,
-`beats[]` (each beat: trigger condition, text builder, optional decision with costs), `adapt(event)`
-for trade/injury/cut, and `resolve`. Stored per active arc: `{ templateId, subjects, beat, choices, openedWeek }`.
-It powers college storylines (§4), draft-night drama, trade requests, holdouts, and coaching reunions.
+### F6. Storyline engine — `engine/storyArcs.js`
+Generalizes `weeklyExperience.js` arcs. An **arc template** has `eligible(state) → subjects`, `beats[]`
+(each with a trigger, a text builder and an optional decision with costs), `adapt(event)` for
+trade/injury/cut, and `resolve`. Active arc = `{ templateId, subjects, beat, choices, openedWeek }`.
+It powers college stories (§4), draft-night drama (§6), trade requests and holdouts (§7–8), coaching
+reunions (§9), player-card status (§10) and X-Factor awakening arcs (§11).
 Rules: at most 2 active user-facing arcs, at most 1 decision per stage, and each arc resolves exactly once across reloads.
+
+### F7. Front-office phone — `engine/inbox.js` + `components/frontOffice/Phone.jsx`
+One inbox for everything that wants your attention: trade calls, agent calls, scout alerts, coach
+interview requests and arc decisions. Each item has a priority, an expiry and one-tap actions, and can be
+answered by the assistant when delegated. This replaces scattered modals (`pendingTradeOffer`, story popups)
+with a queue you can clear in one sitting.
+
+---
 
 ## 4. College storylines — "Saturdays"
 
-**Goal:** you *know* next year's draft class before it's a draft class, and following a kid feels like
-fandom with stakes.
+**Goal:** you *know* next year's draft class before it's a draft class, and following a kid feels
+like fandom with stakes.
 
-Mechanics
-- **Schools & conferences**: ~96 fictional schools in 8 conferences, each with prestige, scheme,
-  and a derived color and mascot (`franchiseLore` style, zero bytes). Prospects belong to real rosters, so
-  teammates exist. This yields QB–WR connections, "two first-rounders from the same D-line," and later
-  reunion stories in the pros.
-- **College season sim (lightweight)**: team strength = sum of top prospects' readyOvr + school prestige.
-  A weekly game results table (1 row per game, bytes: ~4 per game) → conference standings, a Top-25 poll,
-  conference title games, a 12-team playoff, and a national champion. Prospect production is already
-  deterministic per game; it now scales with opponent strength so **big-game performances** are real.
-- **Awards**: Heisman watch (weekly top-5 ladder), position awards, All-American teams. Awards feed
-  draft stock and prospect bios ("Heisman finalist").
-- **Arc templates** (via F6, replacing the 4 fixed labels), ~20 at launch, for example: *Breakout sophomore*,
-  *Injury comeback*, *Transfer portal*, *QB competition*, *Small-school dominator*, *Character concern*
-  (off-field incident; interviews matter), *Position switch* (S→LB, changes projection), *Bloodlines*
-  (father played for your franchise, from `franchiseLore` legends), *Senior Bowl riser*, *Workout warrior*
-  (combine outlier, tape disagrees), *Declares early* (juniors), *Returns for senior year*. Each arc
-  changes hidden truth (readyOvr/ceiling/character) *and* what scouts believe, and not always in the same direction.
-- **Early declarations**: after the college season, juniors with high stock may declare (≈ 25–40 per
-  year). The class size varies year to year. Weak and strong draft years become a strategic factor for tanking
-  or trading into the next year.
-- **Transfers**: 3–5% of underclassmen transfer each spring (role, school, and scheme change).
-- Stats are kept per season, not per game. Old cohorts compact to career lines after the draft (the existing `packCollege`).
+### Mechanics
+- **Schools & conferences**: ~96 fictional schools in 8 conferences with prestige, scheme, colour and mascot. These are derived (`franchiseLore` style, zero bytes). Prospects are on real rosters, so teammates exist: QB–WR connections, a stacked D-line, and pro reunions later.
+- **Lightweight college season**: team strength = top prospects' readyOvr + prestige, with one result row per game (~4 bytes). This gives conference standings, a **Top-25 poll**, rivalry weeks, conference title games, a **12-team playoff** and a national champion. Prospect production already exists per game; it now scales with opponent strength, so big-game performances are real.
+- **Awards**: a weekly **Heisman ladder**, position awards and All-Americans. They feed draft stock and bios.
+- **Draft stock ticker**: each prospect gets a weekly **stock** (−3…+3) from production vs expectation, awards and arc beats. It moves consensus (§6), not truth. Your scouts may disagree.
+- **Arc templates** (F6), ~24 at launch. Each changes hidden truth *and* public perception, not always in the same direction:
+  *Breakout sophomore · Injury comeback · Transfer portal · QB battle · Small-school dominator ·
+  Character concern · Position switch · Bloodlines* (a relative is a `franchiseLore` legend) *· Senior Bowl riser ·
+  Workout warrior · Tape darling (bad testing) · Declares early · Returns for senior year · Team captain ·
+  Walk-on to starter · Coach's son · Two-way player · Late-season collapse · Bowl-game MVP ·
+  Scheme mismatch (production down, talent unchanged) · Medical redshirt · Hometown hero · Big-stage flop ·
+  Generational hype* (X-Factor potential, §11).
+- **Your choices on Saturday** (optional, one per week, auto-filled by delegation):
+  - **Attend a game** with your GM (big knowledge boost on 2–4 prospects from both rosters, and it's visible to rivals as a signal).
+  - **Send a scout to a bowl or all-star game** (conference-wide knowledge).
+  - **Build rapport**: following and attending raise a small hidden `rapport`, which later improves interviews, UDFA recruiting and rookie-contract mood.
+- **Early declarations**: after the college playoff, juniors with high stock may declare (~25–40 a year), so class size and strength vary. A **Class strength forecast** (Weak / Average / Deep at QB, etc.) lets rebuilds plan tanking or trading into future years.
+- **Transfers**: 3–5% of underclassmen transfer each spring, changing role, school and scheme.
+- Stats are stored per season. Drafted cohorts compact to career lines (the existing `packCollege`).
 
-UI — **Saturdays** screen (replaces Campus Watch)
-- *This week*: the top-25 scoreboard (one strip), a "Your prospects played" feed (followed or assigned players only,
-  with one-line game lines), and the Heisman ladder.
-- *Classes*: a virtualized table (not paginated cards) with columns `Name · Pos · School · Class · Tier · Stock ▲▼ ·
-  Your grade · Confidence`. Saved filters. Following a player is the same action as adding him to the draft board.
-- *Prospect page* (shared with Draft, §6): story timeline, season stat table with position-aware columns,
-  scouting notes by author, and the school/teammates strip.
-- Hub gets one card: "Saturday recap": 3 lines max, only about players you follow.
+### UI — Saturdays screen (replaces Campus Watch)
+```
+┌ SATURDAYS · Week 9 ───────────────────────────────────────────── [Delegate ▾] ┐
+│ TOP 25 strip:  #1 Ridgeline 9-0 ▸ W 38-14 │ #2 Coastal 8-1 ▸ L 20-23 │ …  ⟶    │
+├──────────────────────────────┬────────────────────────────────────────────────┤
+│ YOUR PROSPECTS PLAYED  (6)   │ HEISMAN LADDER            │ THIS SATURDAY       │
+│ ● J. Okafor QB  24/31 342 3TD│ 1 ▲ J. Okafor  QB Ridgel. │ Attend: Ridgeline @ │
+│   Stock ▲2 · "Arm talent is  │ 2 ▼ M. Reyes   RB Coastal │ Coastal (4 of your  │
+│   real" — K. Lund (area)     │ 3 ▲ …                     │ board players)  [Go]│
+│ ● T. Banks EDGE 2 sacks …    │                           │ Scouts: 3/3 assigned│
+├──────────────────────────────┴────────────────────────────────────────────────┤
+│ STORYLINES  ▸ "Transfer portal: D. Hale leaves Pinecrest for Ridgeline"       │
+│             ▸ "Bloodlines: grandson of your 1998 MVP commits to Lakeshore"    │
+└───────────────────────────────────────────────────────────────────────────────┘
+Tabs: This week · Classes · Schools · Storylines · Awards
+```
+- **Classes**: a virtualized table `Name · Pos · School · Yr · Tier · Stock ▲▼ · Your grade (range bar) · Confidence · Flags`, with saved filters. **Following = adding to your board.**
+- **Schools**: a conference standings grid and a school page (roster of prospects, schedule, results, colours).
+- **Prospect page** (shared with Draft, §10 prospect variant): story timeline, position-aware stat table, scouting notes by author, and a teammates strip.
+- Hub gets one "Saturday recap" card, 3 lines max, only about players you follow.
+
+---
 
 ## 5. Scouting — "The Department"
 
-**Goal:** turn the binary 10-point reveal into a year-round resource game with people, bias, and payoff.
+**Goal:** turn the binary 10-point reveal into a year-round resource game with people, bias and payoff.
 
-Mechanics
-- **Knowledge per prospect** `k ∈ 0–100` (stored only for prospects you've touched, as sparse `{id: k}`).
-  The displayed rating is `truth + noise(id, teamId, scoutBias) × (1 − k/100)`. Noise is *derived* (hash-seeded),
-  so it costs zero bytes and stays stable across reloads. It also differs per team, so CPU boards differ too.
-- The **range** shown = ± (12 × (1 − k/100)), with a floor of ±2 until he's played a pro snap. This fixes the leak (no id-char seeding).
-- **Grade becomes perceived**: `grade` is computed from the *perceived* ratings. The true grade never leaves the engine.
-- **Scouts (people, F5)**: Director + 3 area scouts (regions map to conferences) + 1 national scout.
-  Attributes: `eye` (noise reduction rate), `bias` (e.g. "loves speed", "position blind spot"), `region`,
-  `rep`. Scouts gain rep when their top-graded players become starters and lose it on busts. A scout
-  **hit-rate card** tracks this. Scouts can be hired, fired, and poached (hooks into §9 coaching market).
-- **Weekly assignments (in season)**: each scout gets 1 assignment per week: *Watch player* (+k on one),
-  *Cover conference* (+small k on many), or *Cross-check* (the Director re-grades, which removes bias). Default
-  assignments auto-fill from your board. There's no weekly chore unless you want one.
-- **Offseason events** (F1 stages) with a **visit budget**:
-  - *Combine*: measured numbers (40, vert, bench, shuttle, **injury medicals**) are public for everyone.
-    Athletic truth is revealed, but football truth isn't.
-  - *Interviews* (15 slots): reveal personality (uses `character.js` fog → full view) and flag character arcs.
-  - *Pro days / private workouts* (10 visits): large k gain on one player; other teams see that you visited,
-    and CPU GMs react ("smokescreen" value).
-- **Medicals**: hidden injury-proneness truth; the combine reveals a flag ("knee: minor/major"),
-  and the fall-off risk is modeled in progression (Codex).
-- **War-room disagreement**: for top prospects, show 2–3 scout opinions side by side ("Area scout: 1st
-  round, Director: 3rd, 'hips are stiff'"). The disagreement *is* information.
+### Mechanics
+- **Knowledge** `k ∈ 0–100` per prospect, stored sparsely (`{id: k}`, touched prospects only). The displayed rating = `truth + noise(id, teamId, scoutBias) × (1 − k/100)`. Noise is hash-derived, so it costs zero bytes, stays stable, and differs per team (CPU boards differ too).
+- **Range** = ± 12 × (1 − k/100), with a ±2 floor until the player's first pro snap. This fixes the leak.
+- **Perceived grade** is computed from perceived ratings. The true grade never leaves the engine.
+- **Knowledge decays** slowly (−2/month) for players you stop watching, so re-checks matter late.
+- **Scouts** (F5): a Director, 3 area scouts (regions = conferences) and 1 national scout, each with `eye` (noise reduction), `bias` ("loves speed", "position blind spot", "small-school skeptic"), `region`, `rep` and `salary` (the staff budget, §9). **Hit rate** comes from how their top grades turned out 3 years later. Scouts can be hired, fired and poached.
+- **Weekly assignments (in season)**: 1 per scout per week: *Watch player* (+k on one), *Cover conference* (+small k on many), *Cross-check* (the Director re-grades and removes one scout's bias) or *Pro scouting* (see below). Assignments auto-fill from your board, so there's no weekly chore unless you want it.
+- **Offseason events** with budgets:
+  - **Combine**: measurables and **medicals** become public for everyone. Athletic truth is revealed; football truth isn't. It generates "combine riser/faller" news.
+  - **Interviews** (15 slots): reveal personality (the full `character.js` view) and surface character arcs. Rapport (§4) improves results.
+  - **Pro days / private workouts** (10 visits): a big k gain on one player. Rivals see your visits, and CPU GMs react (a smokescreen has value).
+- **War-room disagreement**: for top prospects, 2–3 scout opinions side by side ("Area: R1 — *'fluid hips'*; Director: R3 — *'tight in space'*"). The disagreement *is* information.
+- **Pro comps & sleeper alerts**: each report compares the prospect to a real current league player ("Plays like your LB D. Ward"), and scouts flag 3–5 sleepers a year that CPU consensus has undervalued.
+- **Pro personnel (light)**: pro players' OVR stays public, but **hidden trajectory** (early decline, late bloom) and **injury proneness** are revealed only by pro-scouting assignments. This matters in trades and free agency ("Our pro scout thinks he falls off a cliff at 30").
+- **Camp reveal** (F1 stage): after camp, your rookies' true ratings appear next to what you believed. Each gets a "Scout was right / wrong" verdict that updates scout rep. It's one of the best moments in the offseason, so it gets a proper reveal animation.
 
-UI — **Big Board**
-- A drag-to-rank personal board (tiers: Blue / Red / Green / Undraftable). The default order is your
-  staff's perceived grade, and you can override it.
-- Columns: `Rank · Player · Pos · Perceived OVR (range bar) · Ceiling tier · Scheme fit · Need · k% · Flags`.
-  The range bar visually tightens as k rises, so the core feedback loop is visible.
-- A "Where do the scouts disagree?" filter surfaces the interesting players.
-- The **Scouting Office** tab shows scouts, their assignments, hit rates, and a one-click "auto-assign from board".
+### UI
+**Big Board** (the main scouting surface, also used live in the Draft Room)
+```
+┌ BIG BOARD · 2027 class · Deep at EDGE, thin at QB ──────── [Auto-rank] [Mocks] ┐
+│ Tiers:  BLUE (6) │ RED (14) │ GREEN (31) │ WATCH │ DO NOT DRAFT                  │
+│ #  Player            Pos  Your grade          Fit  Need  k%   Cons.  Flags      │
+│ 1  J. Okafor   ⚡pot  QB   ▕━━━━━██━━━━▏ 78–86  92   ●●●  71%  #3    🩺 ok      │
+│ 2  T. Banks          EDGE ▕━━━━━━━███━━▏ 80–84  88   ●●○  89%  #9    ⚑ sleeper  │
+│ 3  …                                                                          │
+└─ drag rows to re-rank · ⇧-click to tier · range bar narrows as k rises ────────┘
+```
+- The range bar is the core feedback loop: it visibly tightens with every assignment.
+- The "Cons." column (consensus mock slot) next to your grade shows where your edge is.
+- A **"Where do we disagree?"** filter shows prospects where scouts differ, or where you differ from consensus.
+- **Scouting Office** tab: scout cards (face, region map, bias, hit rate, assignment dropdown) and one-click *Auto-assign from board*.
+- **Combine** tab: a sortable measurables table with position percentiles and a spider chart on hover.
+
+---
 
 ## 6. The Draft — "Draft Weekend"
 
-**Goal:** a tense, fast, three-night event where your preparation pays off, rivals behave like people,
-and every pick has a story.
+**Goal:** a tense, fast, three-night event where preparation pays off, rivals behave like people, and every pick has a story.
 
-Mechanics
-- **Three nights**: R1 / R2–3 / R4–7. Round 1 is played pick-by-pick with drama; Night 2 is fast;
-  Night 3 is "sim to my pick" by default with a best-available auto-list.
-- **CPU boards are real boards**: each CPU team drafts from its *own* perceived grades (F5 noise +
-  its scouts + GM tendency + scheme fit + needs + mode). Reaches and steals now emerge; they aren't scripted.
-- **Mock drafts**: a league consensus mock (average of all CPU boards) updates weekly in the offseason.
-  "Projected range: picks 8–15" is shown for each prospect, and the gap between your grade and consensus *is* the opportunity.
-- **Trades on the clock**:
-  - Future picks (next 2 years) are tradeable everywhere (fixes `pickKey.year`; owners become
-    `{year, round, originalTeamId}`; Codex migrates `draftPickOwners`).
-  - *Trade up*: pick a target slot and the desk returns 1–3 real packages from the owner's perspective, with a
-    "they want your 2027 2nd" style counter.
-  - *Trade down*: when you're on the clock, 0–3 incoming calls appear ("Team X offers #19 + #52 for #11"),
-    based on CPU teams whose target is on the board.
-  - Draft trades use F2 perceived value, not the 103% flat rule.
-- **Clock & auto-pick**: the timer runs only on your pick (keep it). Expiry takes *your board's* top player, not true OVR (fixes the store bug).
-- **Moments** (F6 beats, max ~6 per draft): a run on a position ("4 corners in 6 picks"), a slider
-  (a "green room" faller with a camera cut), a rival taking your guy one pick before you (with the GM's name),
-  a trade-up bombshell, "Mr. Irrelevant", and a hometown pick from `franchiseLore`.
-- **UDFA scramble** (stage after the draft): 90 seconds of bidding on the top 60 undrafted players with a
-  small bonus pool ($ units) and "playing-time promise" chips. Uses `faMarket` resolution with 1 day.
-- **Rookie contracts**: slotted and signed automatically. For 1st-rounders, the **5th-year option** decision appears 3 years later.
-- **Draft grades, honest version**: the night-of grade is shown as "Media grade" (consensus-based),
-  and **Re-grade after 3 seasons** is shown in the Draft History (real AV-style value), with scout rep updating
-  from it. This long-tail payoff is the main hook for returning to the draft history screen.
+### Mechanics
+- **Three nights**: R1 pick-by-pick with drama; R2–3 fast; R4–7 "sim to my pick" with a best-available auto-list.
+- **Real CPU boards**: each CPU team drafts from its *own* perceived grades (derived noise + its scouts + GM archetype + scheme fit + needs + mode). Reaches and steals emerge naturally.
+- **Consensus mock**: the average of CPU boards, updated weekly in the offseason and during the draft. Each prospect has a projected range ("picks 8–15"). The gap between your grade and consensus is the opportunity.
+- **Future picks** (next 2 years) are tradeable everywhere. `draftPickOwners` becomes `{year, round, originalTeamId}` (Codex migration).
+- **Trade up**: choose a target slot; the owner returns 1–3 real packages from *its* perspective ("they want your 2028 2nd").
+- **Trade down**: while you're on the clock, 0–3 incoming calls in the Phone (F7) from CPU teams whose target is still on the board.
+- **Conditional picks** (in draft and trades): "2028 3rd → 2nd if he plays 50% of snaps", evaluated at season end.
+- **Clock**: runs only on your pick. On expiry it takes *your board's* top player (fixes the true-OVR auto-pick).
+- **Moments** (F6 beats, ~6 per draft): position runs, a green-room faller, a rival taking your guy one pick earlier (named GM), a trade-up bombshell, a hometown/bloodlines pick, "Mr. Irrelevant" and an X-Factor-potential prospect coming off the board.
+- **UDFA scramble**: 90 seconds bidding on the top 60 undrafted players with a small bonus pool and "roster spot promise" chips (a broken promise hurts rapport and the agent relationship).
+- **Rookie contracts**: slotted and auto-signed. The **5th-year option** decision appears 3 years later.
+- **Grades, honestly**: a night-of **Media grade** (consensus-based, delivered by 2 named analysts with opposite takes), then a **3-year re-grade** in Draft History using real value. Scout rep updates from the re-grade.
 
-UI — **Draft Room**
-- Three zones: left, the *ticker* (last 5 picks with instant analyst one-liners and a "your board" delta: "took #22 on your board");
-  center, *your board* with drafted players struck through live and "best available by need" pinned;
-  right, *on-the-clock* card (team, GM, their top needs, rumor: "hearing they love OL").
-- On your pick: the prospect card expands into a full-screen **Draft Card** ceremony (face, school colors,
-  the scout quote you trusted, projected role). One click to confirm; it's skippable in settings.
-- A "Trade" button is always visible and opens the desk as a sheet, not a new screen.
-- Mobile: board and ticker become tabs; the on-the-clock card stays sticky.
-- Existing 943-line `Draft.jsx` is split into `draft/DraftRoom.jsx`, `BigBoard.jsx`, `ProspectCard.jsx`,
-  `DraftTicker.jsx`, `DraftTradeSheet.jsx`, and `DraftRecap.jsx`.
+### UI — Draft Room
+```
+┌ DRAFT NIGHT 1 · Pick 11 · YOU'RE ON THE CLOCK  01:12 ──────── [Trade] [Auto] ┐
+├─ TICKER ──────────┬─ YOUR BOARD ───────────────────────┬─ ON THE CLOCK ───────┤
+│ 10 DEN  T. Banks  │  1 ~~J. Okafor~~ (#3 CLE)          │ [crest] YOU           │
+│   EDGE · "a reach │  2 ~~T. Banks~~  (#10 DEN) 😤      │ Needs: CB ●●● OL ●●○  │
+│   by 8 spots"     │  3 R. Mills   CB  81–85  fit 90 ◀  │ Best fit: R. Mills    │
+│   Your board: #2  │  4 A. Cole    OL  79–85  fit 76    │ 📞 2 calls waiting    │
+│ 9  LV  …          │  5 …                               │  · SEA: #19 + #52     │
+│                   │  [Best available ▾] [By need ▾]    │  · NYG: #14 + '28 R3  │
+└───────────────────┴────────────────────────────────────┴───────────────────────┘
+```
+- Ticker (left): the last 5 picks, an analyst one-liner each, and a "your board" delta ("took #2 on your board").
+- Board (centre): your Big Board live, with drafted players struck through, plus "best available by need".
+- On-the-clock (right): team, GM face and archetype, their needs, a rumour ("hearing they love OL"), and waiting calls.
+- **Draft Card ceremony** on your pick: a full-screen card (face, school colours, the scout quote you trusted, projected role). Confirm is one click; it can be turned off in Settings.
+- **Recap**: the class grade (media) and a "Your haul" strip of compact player cards, with a Camp-reveal teaser.
+- Mobile: Board / Ticker / Clock become tabs, with the clock card sticky.
+- `Draft.jsx` is split into `draft/DraftRoom.jsx`, `BigBoard.jsx`, `DraftTicker.jsx`, `OnTheClock.jsx`, `DraftTradeSheet.jsx`, `DraftCard.jsx` and `DraftRecap.jsx`.
+
+---
 
 ## 7. Trades — "The Phones"
 
-**Goal:** trades that feel like negotiating with people who have goals, without the ability to
-spam-click until the dice say yes.
+**Goal:** trades feel like negotiating with people who have goals, and spam-clicking never wins.
 
-Mechanics
-- **Deterministic acceptance**: CPU willingness = F2 perceived value ratio vs a *hidden per-GM threshold
-  seeded per (GM, week)*. Same offer, same week, same answer. No re-roll exploit.
-- **Counter-offers**: a rejection returns the smallest adjustment that would work ("Add your 2027 3rd"
-  or "Swap Smith for Jones"), found by a bounded search over your non-core assets. This replaces "Try offering more".
-- **"What would it take?"**: select any player and get the partner's asking package in one click.
-- **Trade block & shopping**: put players on your block; CPU teams respond over the week with offers in the
-  inbox, not a single random pending offer. Up to 3 open offers, each with an expiry.
-- **Team modes drive the market** (F2): contenders buy at the deadline and rebuilders sell vets for picks.
-  The *Deadline Day* stage (week 11) is a special event: the phones ring, a league-wide trade ticker runs, and
-  3–6 CPU↔CPU trades occur with real pick exchanges.
-- **Cap & roster legality** in every trade (fixes the missing cap check in `executeTrade`): salary matching
-  only when over the cap, dead money shown before you accept, and roster 46–53 enforced post-trade.
-- **Player agency**: `character.js` `wantsOut` generates **trade requests** as F6 arcs (with a deadline, a
-  public-vs-private choice, and a leverage decline in value if public). `tradeFallout` morale is already built.
-- **GM relationships**: each CPU GM keeps a small `trust` score with you (lopsided trades lower it; fair
-  ones raise it). Low trust raises their threshold. A former staffer now GM (F5) starts friendly.
-- **League trades**: move from 1:1 swaps to mode-driven deals using the same engine, capped per week.
-  They appear in a *Transactions* feed.
+### Mechanics
+- **Deterministic acceptance**: willingness = F2 perceived value ratio vs a hidden per-GM threshold seeded per (GM, week). Same offer, same week, same answer.
+- **Counter-offers**: a rejection returns the smallest change that would work ("Add your 2028 3rd", "Swap Smith for Jones"), found by a bounded search over your non-core assets. **A counter proposed as-is is always accepted.**
+- **"What would it take?"**: select any rival player and get their asking package in one click.
+- **Trade block & shopping**: put players on your block (optionally "quietly"). CPU teams respond during the week via the Phone (F7). Up to 3 open offers, each with an expiry.
+- **Team modes make the market**: contenders buy at the deadline and rebuilders sell veterans for picks. **Deadline Day** (week 11) is an event with a countdown, rumours, a live league-wide trade ticker and 3–6 CPU↔CPU deals with real pick exchanges.
+- **Legality**: cap-legal after the trade (fixes `executeTrade`), dead money shown before you accept, roster 46–53 enforced, and no trading a player within 1 week of signing him.
+- **Player agency**: `wantsOut` generates **trade-request arcs** (F6) with a deadline and a *public vs private* choice. Going public drops his value (leverage) and morale if ignored. `tradeFallout` morale is already built.
+- **GM relationships**: each CPU GM keeps `trust` with you. Lopsided deals lower it and fair ones raise it. Low trust raises their threshold and makes them stop calling. A former staffer who's now a GM (F5) starts friendly.
+- **Rumours & leaks**: shopping a star publicly creates a rumour. If he has the Loyal trait and hears it, his mood drops. Keep "quiet" shopping for a higher-trust partner.
+- **League trades**: mode-driven multi-asset deals from the same engine, capped per week, in a Transactions feed.
 
-UI — **Trade Machine**
-- Two columns with a live **value meter from the partner's perspective** ("They see: 82% of what they give").
-  It shows a band, not a number: *Insulting / Needs work / Close / Accept*. You get feedback without precise
-  oracle abuse.
-- A partner header shows mode, top 3 needs, GM name/trait, and trust.
-- An asset picker with filters (Your block · Surplus depth · Picks by year).
-- Cap impact strip: your cap before/after, dead money, and roster count.
-- One primary button, **Propose**. The response animates as a phone call with the counter inline, **Accept counter** in one click.
-- *Offers* inbox tab: incoming offers, each with value, fit, and fallout preview.
+### UI — Trade Machine
+```
+┌ TRADE MACHINE · with [crest] Denver Pikas · REBUILD · GM R. Voss "Analytics" 🤝 62 ┐
+│ YOU SEND                          │ YOU GET                                       │
+│ [card] M. Ortiz WR 84 · $14M ×2   │ [card] 2028 R1 (DEN) · proj. #4–9             │
+│ [chip] 2027 R3 (own)              │ [card] K. Lowe  CB 74 · $2M ×3 · age 23       │
+│ + Add from: Block · Surplus · Picks│ + Add from their roster · picks              │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ THEY SEE  ░░░░░░░░░░▓▓▓▓▓▓│░░  CLOSE  (band, not a number)                        │
+│ CAP  You $188M → $176M ✓ · Dead money $0 · Roster 53 → 53 ✓                       │
+│ LOCKER ROOM  Ortiz is a captain: team morale −3 · owner trust −1                  │
+│                                              [ What would it take? ] [ PROPOSE ] │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+- The value meter is a **band from the partner's perspective** (*Insulting · Needs work · Close · Accept*). It gives feedback without an exact oracle.
+- The partner header shows mode, top needs, GM face and archetype, and trust.
+- The response plays as a short phone call with the counter inline: **Accept counter** in one click, or *Keep talking*.
+- The **Offers** tab is the Phone filtered to trades, each row with value band, fit and fallout preview.
+
+---
 
 ## 8. Free agency & re-signing — "The Market"
 
-**Goal:** keep K6's 4-day market (it works) but add the decisions that make the NFL offseason
-tense: tags, guarantees, compensatory picks, and your own players testing the market.
+**Goal:** keep K6's 4-day market (it works) and add the decisions that make the NFL offseason tense.
 
-Mechanics
-- **Re-sign window** (F1 stage before FA): your expiring players are listed with their `contractStance`
-  (already built), ask, market projection, and a recommendation (re-sign / tag / let walk / trade
-  before the window closes). Unsigned players hit the market *and can be re-signed there against rivals*.
-- **Contract offers v2** (F3): salary + years + guaranteed % + signing bonus. Players value guarantees
-  per `faPreferences` (greed/security axes), so structure matters, not only AAV. The Cap tab shows
-  future-year cap charts.
-- **Tags**: franchise/transition tag in the re-sign window (a tagged player's mood from `moodFor`, and holdout
-  arc risk via F6).
-- **RFA/ERFA** for players with ≤3 accrued seasons: cheap tenders with pick compensation if another team signs them.
-- **Compensatory picks**: net FA losses award extra R3–R7 picks next year. This gives letting players walk a real upside.
-- **Visits & recruiting pitch**: on Day 1 you may host 3 visits. A visit reveals his priorities (money / winning / role /
-  scheme fit / location) and gives a small preference bonus. Your coaching staff's scheme fit (F4) and team mode are
-  visible selling points.
-- **Market dynamics**: the first-day frenzy is modeled (top-10 players sign day 1–2 at a premium) and bargains appear on day 4.
-  CPU clubs follow GM tendencies (the "big spender" archetype overpays) and must stay cap-legal with dead money included (Codex).
-- **Retire `freeAgencyLogic.evaluateOffer`** (random), and route everything through `faMarket.assessOffer`.
+### Mechanics
+- **Re-sign & Tag window** (the F1 stage before FA): expiring players with their `contractStance`, ask, market projection, pro-scouting trajectory (§5) and a recommendation: *re-sign · tag · tender · test market · let walk · trade before the window closes*. Unsigned players reach the market and can still be re-signed there, in competition with rivals.
+- **Contract structure** (F3): salary + years + guaranteed % + signing bonus + one incentive. Players value guarantees through `faPreferences` (greed/security axes), so structure matters, not only AAV.
+- **Tags, RFA/ERFA tenders and compensatory picks** (net FA losses award R3–R7 picks next year).
+- **Agents** (F5): each FA has an agent with a style (*Hardball*, *Relationship*, *Fast mover*). Agent memory is tracked: lowballing a Hardball agent's clients raises their floors for a year.
+- **Visits & pitch**: on day 1 you host 3 visits. A visit reveals his priorities (money / winning / role / scheme fit / hometown / X-Factor spotlight). Your **pitch** picks 2 of 5 selling points (Contender, Scheme fit, Starting role, Coach's reputation, Hometown), and truthful pitches only: "starting role" becomes a promise tracked in an F6 arc.
+- **Market dynamics**: a day-1 frenzy (the top 10 sign on days 1–2 at a premium), day-4 bargains and late **ring-chasers** (veterans taking the minimum to join contenders). CPU GM archetypes shape spending, and CPU teams stay cap-legal including dead money (Codex).
+- **Holdouts**: an underpaid star with a Greedy trait can start a holdout arc in camp (skip camp, lose practice development). Options: extend, trade, or wait (morale and owner cost).
+- **Retire `freeAgencyLogic.evaluateOffer`**; route everything through `faMarket.assessOffer`.
 
-UI
-- *Re-sign window*: one table with per-row decision chips (Re-sign · Tag · Test market · Let go) and a
-  running cap total at the top. **Apply recommendations** is one click.
-- *Market*: keep the day stepper. Add a **Shortlist** (your targets across days), an offer builder with
-  structure sliders plus a "likelihood" band (not a %), and the **Wire** (existing MarketWire) as a live ticker.
-- The cap chart (5 years, stacked by player; dead money in its own color) is shared with Roster.
+### UI
+- **Re-sign window**: one table, with decision chips per row and a sticky **cap waterfall** at the top (current → after decisions → projected FA room). **Apply recommendations** in one click.
+- **Market**: keep the day stepper. Add a **Shortlist** column that persists across days, a **position heat map** (supply vs how many teams need it), an offer builder with structure sliders and a likelihood band, and the Wire as a live ticker.
+- A **Cap Chart** (5 years, stacked by player, dead money hatched) is shared with Roster and the Trade Machine.
+
+---
 
 ## 9. Coaching trees — "The Staff"
 
-**Goal:** coaches become characters whose careers you shape, whose schemes shape your roster, and
-whose tree becomes your legacy.
+**Goal:** coaches become characters whose careers you shape, whose schemes shape your roster, and whose tree becomes your legacy.
 
-Mechanics
-- **Richer coaches** (F5): age, scheme (F4), three ratings (Offense, Defense, Development) replacing flat skill
-  points, and personality traits (Players' coach, Disciplinarian, Innovator, Recruiter, Loyal, Ambitious).
-  Existing `skills` map onto the ratings for old saves.
-- **Staff depth**: HC, OC, DC, ST coordinator, QB coach, and a Development coach (position-group bonuses to
-  progression via Codex `progression.js` hook), plus the Scouting Director (§5).
-- **Contracts & budget**: each staff member has years and salary against a *staff budget* (owner-set,
-  separate from the cap, grows with owner trust). This creates a real tradeoff: an expensive OC or two more scouts.
-- **Poaching both ways**: after the season, successful user coordinators get HC interviews. You may
-  *block* (they get annoyed; an Ambitious coach becomes unhappy and his rating drops) or *let them go*
-  (you gain **Tree prestige** and a friendly GM/HC relationship, and they take your scheme with them). You can also
-  pursue other teams' coordinators (interview requests, with a denial chance).
-- **The Tree**: `mentorId` becomes a full lineage. **Tree prestige** = the sum of your descendants' success.
-  It adds hiring pull (better candidates accept), feeds `legacy.js` achievements ("Coaching tree: 5 head coaches"),
-  and gives rivalry flavor when a protégé beats you.
-- **Hiring as an event**: a vacancy opens a 2-round interview flow: a shortlist of 5 (scheme, ratings, asking
-  salary, fit with your roster shown as "% of starters who fit"), then interviews that reveal hidden traits. CPU teams hire simultaneously, so
-  a candidate can take another job while you deliberate.
-- **Carousel as a show**: Black Monday (firings), a hiring ticker, and "Your former OC hired by X" news.
-  Coaches age, retire (65–72), and become consultants or TV analysts (flavor quotes in news).
-- **Scheme transition cost**: changing scheme gives 1 season of reduced fit, and players with low fit
-  may request trades (F6). Ties the tree to trades and FA.
+### Mechanics
+- **Richer coaches** (F5): age, scheme (F4), three ratings (**Offense, Defense, Development**) replacing flat skill points, and traits (*Players' coach, Disciplinarian, Innovator, Recruiter, Loyal, Ambitious, QB whisperer, Aggressive play-caller*). Play-caller traits feed `gamePlan.js` defaults (4th-down appetite, pass tilt). Old saves' `skills` map onto the ratings.
+- **Staff depth**: HC, OC, DC, ST coordinator, QB coach, Development coach (a progression bonus by position group through a Codex `progression.js` hook), and the Scouting Director plus scouts (§5).
+- **Staff budget**: owner-set, separate from the cap, and growing with owner trust. The tradeoff is real: an elite OC or two more scouts.
+- **Grooming**: mark one assistant as your **successor-in-training**. He gains rating faster, becomes Ambitious sooner, and is likelier to be poached.
+- **Poaching both ways**: after the season, successful user coordinators get HC interviews. *Block* (Ambitious coaches sour, rating −) or *let go* (you gain **Tree prestige** and a friendly GM/HC, and they take your scheme). You may request interviews with rival coordinators (they can deny).
+- **The Tree**: `mentorId` becomes a full lineage. **Tree prestige** = your descendants' success. It increases hiring pull, feeds `legacy.js` achievements ("Coaching tree: 5 head coaches"), and raises the rivalry level when a protégé beats you.
+- **Hiring is an event**: a vacancy opens a 2-round flow. A shortlist of 5 (scheme, ratings, ask, and "% of your starters who fit"), then interviews: 2 questions each that reveal hidden traits. CPU teams hire at the same time, so a candidate can take another job while you deliberate.
+- **Carousel as a show**: Black Monday firings, a hiring ticker, "Your former OC hired by X". Coaches age and retire (65–72) into TV analysts, who become the voices of Media draft grades (§6).
+- **Scheme transition cost**: switching schemes gives one season of reduced fit, and low-fit players may request trades (F6).
+- **User career**: the user HC gets the same ratings. Owner review (K1) can fire you and **job offers** consider your tree prestige.
 
-UI — **Staff** screen
-- *Org chart* (top): your staff as cards with face, scheme, ratings, contract, and mood.
-- *Coaching Tree* view: an interactive tree (SVG, collapsible) rooted at you, with branches colored by
-  current role (HC / coordinator / out of football) and a "league trees" tab showing the 5 biggest trees.
-- *Market / Interviews*: candidates in a table, then an interview modal with a 2-question reveal.
-- *Carousel* timeline in the offseason command center.
+### UI — Staff screen
+- **Org chart**: staff cards (face, scheme icon, 3 rating pips, contract, mood, and a *Successor* ribbon). The staff budget bar sits on top.
+- **Coaching Tree**: an interactive, collapsible SVG tree rooted at you. Nodes are faces, with rings coloured by current role (HC / coordinator / assistant / retired). Hovering shows the record and current team. There's also a *League trees* tab with the 5 biggest trees.
+- **Market & interviews**: a candidate table, then an interview modal (2 questions and a reveal).
+- The **Carousel** feed appears in the Command Center during Black Monday.
 
-## 10. Cross-system web (what makes it more than six features)
+---
+
+## 10. Player card overhaul — "Status first"
+
+**Goal:** one glance tells you *what's going on with this player and what to do about it*. Everything else is one tap away.
+
+### Problems today (`PlayerModal.jsx`)
+6–10 chips appear before any content (dev trait, mood, every public trait, "🔒 +N unknown"). Injury,
+depth role, walk year, holdout and trade request are missing from the header. The accent colour comes
+from OVR rarity, not situation. There are no actions. The default tab is Character even when you
+only want to know if he's healthy. There's no compact variant, so rows, trade chips and draft cards
+re-implement fragments.
+
+### Status engine — `engine/playerStatus.js` (pure, derived, zero bytes)
+`playerStatus(player, ctx) → { primary, secondary[], tone, headline, actions[] }`.
+It ranks every applicable status by priority, and the card shows **one primary status** plus at most 2 secondary.
+
+| Priority | Status | Tone | Headline example | Quick actions |
+|---|---|---|---|---|
+| 1 | **Injured** (out / questionable) | danger | "Hamstring · out 3 wks (back wk 12)" | Move to IR · Sign replacement |
+| 2 | **Holdout / wants out** | danger | "Requested a trade — deadline wk 9" | Talk · Shop him · Ignore |
+| 3 | **In the zone** (X-Factor, live) | xfactor | "⚡ Zone active: 'Okafor Overdrive'" | View ability |
+| 4 | **Walk year / expiring** | warning | "Final year · asks $18M/yr" | Extend · Tag later |
+| 5 | **Hot / slumping** (last 3 games vs his baseline) | positive / warning | "3 straight 100-yd games" | — |
+| 6 | **Rookie / camp reveal** | info | "Rookie · better than we graded (+4)" | Set role |
+| 7 | **Position battle** | info | "Competing with D. Ward for LB2" | Decide |
+| 8 | **Unhappy** (mood < 40, from `moodFor`) | warning | "Frustrated with his role" | Talk |
+| 9 | **Starter / rotation / backup** (default) | neutral | "Starting LT · 98% of snaps" | Depth chart |
+
+Rival players show only public statuses (injury, trade request if public, X-Factor, hot/slump). Prospects show only prospect statuses (Stock ▲, Medical flag, Sleeper, Character concern).
+
+### Layout (full card — modal on desktop, bottom sheet on mobile)
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ [face]  MARCUS ORTIZ  #11                               ╭────╮       │
+│         WR · Houston Apollos · 27 · 6'1" 196            │ 84 │ ▲2    │
+│  ┃ ⚠ WALK YEAR · asks $18M/yr                           ╰────╯ OVR   │
+│  ┃ [ Extend ]  [ Shop ]                    Starter · Hot 🔥          │
+├──────────────────────────────────────────────────────────────────────┤
+│  ROLE           CONTRACT              FORM (last 5)                  │
+│  WR1 · 91% snaps  $14M · 1 yr left    ▁▃▆█▇  86 ypg                  │
+├──────────────────────────────────────────────────────────────────────┤
+│ Overview │ Ratings │ Career │ Contract │ Personality                 │
+│  Overview: 3 key attributes vs position avg · season line ·          │
+│            2 public traits (+2 more ▸) · latest storyline beat       │
+└──────────────────────────────────────────────────────────────────────┘
+```
+- **Status band**: a left rule and background tint from the **status tone**, not OVR rarity. The OVR ring keeps the rarity colour, so quality and situation are both readable without competing.
+- **Three vitals only**: Role · Contract · Form. POT appears in Ratings (as a range if not fully known). Mood lives in Personality, unless it *is* the primary status.
+- **Chips collapse**: at most 2 trait chips, plus a "+N more" drawer. The dev trait moves into the OVR ring as a small corner mark (★ Star, ★★ Superstar, ⚡ X-Factor).
+- **Tabs** (Overview default): *Overview* (the essentials), *Ratings* (grouped bars vs position average, with fog ranges for rivals and prospects, and the editable-mode toggle kept for custom leagues), *Career* (season table, awards, transactions timeline, college career), *Contract* (structure, cap chart, dead money if cut, and a stance/ask for your own players), *Personality* (the existing Character tab content: axes, traits, mood reasons).
+- The **X-Factor** variant adds a foil frame and an **Ability panel** in Overview (§11).
+
+### Variants (one component family — `components/player/`)
+| Variant | Where | Shows |
+|---|---|---|
+| `PlayerCard` full | modal/sheet from anywhere | the layout above |
+| `PlayerCardCompact` | trade chips, FA shortlist, draft haul, hub leaders | face, name, pos, OVR ring, primary status dot + 1-line headline |
+| `PlayerRow` | roster / tables | same data in a row; status dot column; hover → compact card |
+| `ProspectCard` | Big Board, Saturdays, Draft Card | range bar instead of OVR, stock ▲▼, fit, k%, scout quote |
+| `PlayerCardMini` | play-by-play, broadcast, X-Factor toasts | face + name + ⚡ when in zone |
+
+`PlayerModal.jsx` becomes a thin wrapper over `PlayerCard`, so existing callers keep working.
+Accessibility: status is always text + icon (never colour alone), the sheet is focus-trapped, and the tab order goes status → actions → tabs.
+
+---
+
+## 11. X-Factor tier — "One of one"
+
+**Goal:** a tiny group of players (≤ 1% of the league, roughly 10–16 at a time) with **abilities unique
+to each of them**. The abilities visibly change games, have counters, and create the moments people remember.
+
+### 11.1 Earning and losing the tier
+- **Eligibility**: OVR ≥ 88 **and** a qualifying season (All-Pro, or a top-3 position stat line, or a playoff hero game score). Or, rarely, a Generational prospect with *X-Factor potential* who meets a rookie-year milestone.
+- **League cap**: at most 16 active. When more qualify, the best composite (OVR + season + age curve) wins, and the rest are **"X-Factor candidates"** (a hint on the card that feeds the story).
+- **Awakening arc** (F6): a candidate's card shows "⚡ Awakening 2/3" with the milestone left ("1 more 150-yd game"). Reaching it fires a full-screen **Awakening** moment with the ability reveal.
+- **Losing it**: two straight seasons below the bar, OVR < 85, or age decline. **Dormant** state: the ability is kept but inactive, and can be reawakened once. Retired X-Factors enter the franchise record book (`legacy.js`).
+- **Prospects**: scouting (§5) can reveal "X-Factor potential" on Generational college players. It's a hint, never a guarantee.
+
+### 11.2 A unique ability for every player
+Each ability is assembled deterministically from `hashSeed(player.id)` out of four parts, then checked
+against a league **registry** so no two active players share the same trigger + effect pair. On a
+collision the seed advances. Storage: `xFactor: { since, level, seedBump, dormant }` (~20 bytes). The ability itself is derived.
+
+1. **Trigger** (when it can fire), filtered by position family:
+   *3rd down · Red zone · 4th quarter · Two-minute drill · Trailing by 8+ · Opening drive · After a turnover ·
+   Backed up inside own 20 · Road game · Primetime/playoffs · Versus a rival (from `rivalries.js`) · Goal-to-go ·
+   When double-teamed (defense) · Opponent in hurry-up*
+2. **Effect** (what the sim changes), mapped to a real `gameEngine` hook (§11.3):
+   *Completion ↑ · Sack avoidance ↑ · Deep-shot success ↑ · YAC/breakaway ↑ · Broken-tackle ↑ · Contested catch ↑ ·
+   Drop rate ↓ · Pressure rate ↑ · Strip-sack chance ↑ · INT chance ↑ (DB) · Run-stuff rate ↑ · Pass-block win ↑ ·
+   FG range + accuracy ↑ · Return breakaway ↑ · Opponent QB accuracy ↓ (aura)*
+3. **Activation rule** (the in-game "zone"): each ability needs to be **earned inside the game** before it's live:
+   *2 straight completions of 15+ · a 20+ yd run · 2 catches in a drive · a sack · a pass breakup ·
+   3 straight successful blocks on a drive · a made 45+ FG*. It **deactivates** on a counter event (sacked twice, a drop, a penalty, a TD allowed) or after N drives.
+4. **Signature twist** (flavour and a small extra): *Momentum* (a zone-activation TD gives the team a +form bump for the next drive) ·
+   *Aura* (the opponent's play-caller gets more conservative) · *Lockdown* (targets shift away from his receiver) ·
+   *Ice* (the effect doubles in the final 2 minutes) · *Teammate spark* (one teammate gets +half the effect) ·
+   *Showman* (bigger fan and owner reaction in recaps).
+
+With ~14 triggers × ~15 effects × ~7 activations × 6 twists (filtered by position), there are thousands
+of combinations for ~16 active players, so uniqueness is cheap to guarantee.
+
+**Naming**: a derived signature name from the player's name, position and effect ("*Okafor Overdrive*",
+"*The Banks Vault*", "*Lowe Tide*"), with a fallback template list. The one-line description is generated from the parts:
+> ⚡ **Okafor Overdrive** — *In the 4th quarter, once he completes two 15+ yd passes in a row, his completion rate jumps (+7%) until he's sacked. Momentum: a zone TD fires up the offense for a drive.*
+
+**Levels** (1 → 3: *Awakened, Mastered, Legendary*): milestones (zone TDs, playoff wins in the zone)
+raise the magnitude by one step and unlock a second trigger at Legendary. Level 3 is legacy-worthy.
+
+### 11.3 Sim integration (the rules that keep it fair)
+- `engine/xFactor.js` (Claude): `abilityFor(player, registry)`, `xFactorsInLineup(team)`, and a small per-game state machine `{ armed, active, drivesLeft, activations[] }`.
+- `gameEngine.js` gets **one hook point per effect family** (pass, rush, protection, rush-D, coverage, kicking, return) that multiplies the existing probability terms (`pCmp`, `pSack`, breakaway, etc.) only while the player is on the field **and** active **and** the trigger condition holds.
+- **Magnitude caps**: a single effect is at most ±7% relative on its probability term (L1 ±4%, L2 ±5.5%, L3 ±7%). At most 2 X-Factors per team per game can be active at once.
+- **Calibration targets** (`tests/xFactor.mjs` + `calibration.mjs`): a team with one X-Factor gains **+0.3 to +0.8 points/game** on average and 1–2% win probability. League scoring moves by less than 0.3 ppg. Across 10k sims, no single ability family dominates (max/min family value ratio < 2).
+- **Counters**:
+  - Defensive X-Factors cancel or shorten offensive zones in direct matchups (e.g. a *Lockdown* CB vs an X-Factor WR: whoever activates first suppresses the other's activation).
+  - Weekly prep (`weeklyExperience.js` / MatchupPreview) adds a **"Scheme for him"** option against an opposing X-Factor. It delays his activation by 1 trigger but costs a small coverage or run-fit penalty elsewhere, so it's a real tradeoff.
+  - The opponent's X-Factor appears in MatchupPreview with his ability line and last-3-games activation rate.
+- **Determinism**: the ability and its state use the game's seeded RNG, so watch mode and sim mode match (per the K11 guarantee).
+- **Logging**: the play log (`pbp`) records `xf: { id, event: 'armed' | 'active' | 'fired' | 'off' }`, and `gameStory.js` picks up "X-Factor moments" for recaps.
+
+### 11.4 Where it shows up (UI)
+- **Player card**: a foil frame (a CSS gradient border, animated only when `prefers-reduced-motion` allows), a ⚡ mark in the OVR ring, and an **Ability panel**: name, one-line rule, level pips, activation rate this season, a "Signature moments" list and a counter hint for rival players.
+- **Broadcast** (`GameBroadcast.jsx`): a gold ⚡ **ZONE** banner when active, an ability-name toast when it fires, and a zone meter beside the scorebug.
+- **WeekLoadingScreen / scoreboard**: a small ⚡ on the tile when an X-Factor fired in that game.
+- **Recap** (`GameSummaryModal`): an "X-Factor moment" row with the play, and "Zone: 2 activations, 1 TD".
+- **League → X-Factors** page: a gallery of the ≤ 16 active (card grid, filter by team or position), candidates close to awakening, and a history of retired and dormant X-Factors. It's a fun browse page and a trade shopping list.
+- **Economy**: X-Factor adds a trade premium (replacing the dead `'Superstar X-Factor'` string in `getPlayerValue`), an FA ask premium, owner/fan excitement, and an achievement set ("Drafted a future X-Factor").
+
+---
+
+## 12. Cross-system web
 
 | Trigger | Consequence |
 |---|---|
-| You let your OC take a HC job | He takes your scheme. In FA he targets your ex-players who fit it. His draft board shares your scout's biases (he learned them). Rival flavor when you meet |
-| A scout's favorite becomes a Pro Bowler | Scout rep ↑, better scouts want to join you, achievement |
-| You draft a college teammate of your QB | Chemistry bonus for the pair (small), a storyline beat |
-| A prospect's *Bloodlines* arc (father was a franchise legend) | Owner goal "draft him" appears; the crowd reaction in the Draft Card |
-| You trade a fan favorite | `tradeFallout` morale + owner trust; he gets revenge-game flavor in `gameStory` |
-| Heavy dead money | Owner goal "fix the cap"; limits FA day-1 bids |
-| Rebuild mode + extra future picks | The weak/strong draft-class forecast (§4 early declarations) becomes an active tanking or trading decision |
-| Protégé beats you in the playoffs | Rivalry level +1 (`rivalries.js`), tree-prestige line in the recap |
+| You let your OC take a HC job | He takes your scheme. In FA he targets your ex-players who fit it. His board shares your scout's biases. Rival flavour when you meet |
+| A scout's favourite becomes a Pro Bowler or X-Factor | Scout rep ↑, better scouts want to join you, achievement |
+| You draft a college teammate of your QB | A small chemistry bonus and a storyline beat |
+| A *Bloodlines* prospect (relative of a franchise legend) | An owner goal appears ("draft him"), and the Draft Card gets a crowd reaction |
+| You trade a fan favourite or an X-Factor | `tradeFallout` morale + owner trust. Revenge-game flavour in `gameStory`; his zone gets +1 activation chance vs you in the first meeting (the *Revenge* twist) |
+| Heavy dead money | An owner goal to fix the cap; limits FA day-1 bids |
+| Rebuild mode + extra future picks | The class-strength forecast (§4) becomes an active tanking or trading decision |
+| A protégé beats you in the playoffs | Rivalry level +1 (`rivalries.js`) and a tree-prestige line in the recap |
+| An X-Factor enters a walk year | The status band becomes the #1 decision on your Hub; rival GMs start calling the Phone |
+| Camp reveal: rookie better than graded | Scout rep ↑, a rookie arc opens ("earn a role"), the card shows "Rookie · +4 vs our grade" |
 
-## 11. UI information architecture
+## 13. UI information architecture
 
-- New nav section **Front Office** (replaces `office`): `Command Center · Big Board · Draft Room (seasonal) ·
-  Trade Machine · Market · Staff · Saturdays`. `navigation.js` screen ids are preserved as aliases.
-- **Command Center** = offseason timeline (stage stepper across the top), the current stage panel, and a
-  "Needs your decision" queue (max 3). In season it becomes the weekly front office summary: scouting
-  assignments, trade inbox, and college recap.
-- **Shared components** (Claude): `ProspectCard`, `PlayerCard` (pro), `RangeBar`, `ValueMeter`,
-  `CapChart`, `PersonChip` (coach/scout/GM with face), `Ticker`, `DecisionQueue`, `VirtualTable`.
-  All use tokens and the `ui` barrel.
-- **Delegation everywhere**: every stage panel header has `Delegate ▾` (Assistant does it), `Recommend`
-  (it pre-fills, you confirm), or manual. Extends the existing Front Office Assistant settings.
-- Performance: virtualized tables (1,400 college rows and 350 prospects), memoized selectors, and no full-class
-  re-sorts on each tick of the draft.
+- A new nav section, **Front Office** (replaces `office`): `Command Center · Big Board · Draft Room (seasonal) · Trade Machine · Market · Staff · Saturdays`. League gains **X-Factors**. `navigation.js` keeps old screen ids as aliases.
+- The **Command Center** is the offseason timeline stepper, the current stage panel, and a **Needs your decision** queue (max 3, from the Phone). In season it becomes a weekly front-office summary: scouting assignments, trade offers, a college recap and player-status alerts.
+- **Shared components** (Claude): the `components/player/*` family (§10), `RangeBar`, `ValueBand`, `CapChart`, `CapWaterfall`, `PersonChip` (coach/scout/GM/agent with face), `Ticker`, `DecisionQueue`, `VirtualTable`, `StageStepper`, `FoilFrame`. All use tokens and the `ui` barrel.
+- **Motion budget**: celebratory moments (Draft Card, Awakening, Camp reveal, Deadline Day ticker) respect the sim-speed preference and `prefers-reduced-motion`, and are skippable everywhere.
+- **Delegation everywhere**: each stage header has `Delegate ▾ / Recommend / Manual`, extending the Front Office Assistant settings.
+- **Performance**: virtualized tables (1,400 college rows, 350 prospects), memoized selectors, and no full-class re-sorts per draft tick.
 
-## 12. Save & performance budget
+## 14. Onboarding
+
+- First time in each new screen: a 3-step coach mark ("This range bar is your scouts' confidence…"), dismissible and stored as a per-device pref (`components/preferences.js`).
+- The first offseason runs **Recommend** mode by default, so a new player sees good defaults and can intervene.
+
+## 15. Save & performance budget
 
 | Data | Strategy | Target |
 |---|---|---|
-| Scouting knowledge | sparse `{id: k}` for touched prospects only; noise derived | ≤ 15 KB |
-| College schools/teams | derived from seed; store only game results `[w,l,score]` for current season | ≤ 25 KB |
-| College arcs | `{templateId, beat}` per prospect with an arc; text derived | ≤ 40 KB |
-| CPU boards | never stored; recomputed from derived noise at draft time | 0 |
-| People (coaches/scouts/GMs) | ~350 records, compact history (`[year, teamId, roleCode]`) | ≤ 80 KB |
-| Future picks | `{y, r, o}` tuples | ≤ 10 KB |
-| Contracts v2 | 3 extra numbers per player | ≤ 40 KB |
-| **Total new** | | **≤ 250 KB**, plus a soak test at season 10 under the 5 MB quota |
+| Scouting knowledge | sparse `{id: k}` for touched prospects; noise derived | ≤ 15 KB |
+| College schools/teams | derived; only current-season results stored | ≤ 25 KB |
+| College arcs | `{templateId, beat}` for prospects with an arc; text derived | ≤ 40 KB |
+| CPU boards | never stored; recomputed at draft time | 0 |
+| People (coaches, scouts, GMs, agents) | ~400 records, compact history `[year, teamId, roleCode]` | ≤ 90 KB |
+| Future + conditional picks | `{y, r, o, c?}` tuples | ≤ 12 KB |
+| Contracts v2 | 3–4 extra numbers per player | ≤ 40 KB |
+| X-Factor | `{since, level, seedBump, dormant}` × ≤ 16 + history ≤ 60 | ≤ 4 KB |
+| Player status | derived | 0 |
+| **Total new** | | **≤ 250 KB**, plus a season-10 soak under the 5 MB quota |
 
-## 13. Roadmap & ownership (per `AGENTS.md`)
+## 16. Test plan (new files, all seeded through `tests/helpers/seededRandom.mjs`)
 
-Each milestone is independently shippable, keeps old saves loading, and ends green on `npm test`, `npm run lint`, and `npm run build`.
+`scouting.mjs` (noise determinism, no truth leaks through any exported UI helper, monotone range) ·
+`draftWeekend.mjs` (per-team boards, trade up/down legality, conditional picks, UDFA, pick migration) ·
+`assetValue.mjs` · `contracts.mjs` (dead money, tags, options, old-save defaults) ·
+`tradeNegotiation.mjs` (determinism, counter acceptability, cap legality) ·
+`collegeSeason.mjs` (standings consistency, declarations, arc exactly-once) ·
+`coachingTree.mjs` (lineage, poaching, retirement, prestige) ·
+`offseasonCalendar.mjs` (resume after reload at every stage; full delegation completes the offseason) ·
+`playerStatus.mjs` (priority order, fog for rivals, every status reachable) ·
+`xFactor.mjs` (uniqueness across 50 seeded leagues, cap ≤ 16, magnitude caps, calibration bands, watch = sim determinism, counters reduce activation).
+
+## 17. Roadmap & ownership (per `AGENTS.md`)
+
+Each milestone ships on its own, keeps old saves loading, and ends green on `npm test`, `npm run lint` and `npm run build`.
 
 | # | Milestone | Codex (engine/store/tests) | Claude (new modules + UI) | Done when |
 |---|---|---|---|---|
-| **M0** | Quick fixes | Deterministic trade acceptance (seed per GM/week); cap + roster check in `executeTrade`/`acceptTradeOffer`; timer auto-pick uses board order; remove the `freeAgencyLogic` random path; unify the pick chart | Fix `getOvrRange` leak (derive from `hashSeed(id)`); hide true `grade` unscouted (show perceived grade) | Regression tests for each; no id-char seeding left |
-| **M1** | Foundations | `contracts.js` (F3) + dead cap + migration; future picks (`draftPickOwners` with year) + migration; `assetValue.js` (F2) value math | `offseasonCalendar.js` (F1) + Command Center shell; `people.js` (F5); `schemes.js` (F4) data + `schemeFit` | Old save loads mid-season, in FA, and mid-draft; soak 5 seasons with no cap drift |
-| **M2** | Scouting | Progression hooks for medicals (injury-proneness truth) | `scouting.js` (knowledge, derived noise, scouts, assignments, combine/interviews/visits); Big Board + Scouting Office UI; `RangeBar` | Perceived ≠ true at k=0 on every prospect; range shrinks monotonically; CPU boards differ (Kendall τ < 0.9 between teams) |
-| **M3** | Draft Weekend | `cpuMakePick` on per-team boards; draft trade engine on F2; UDFA resolution; 5th-year option; comp picks | Draft Room split + ticker + moments + Draft Card + trade sheet; Draft History re-grade | Reaches/steals occur (≥ 5 picks per R1 more than 8 slots off consensus); a full draft is simmable in < 1 s |
-| **M4** | Saturdays | College season sim (schools, conferences, results, poll, playoff), early declarations, transfers | `storyArcs.js` (F6) + 20 college arc templates, Heisman ladder, Saturdays UI, Hub card | Class size varies year to year; every arc resolves exactly once across reload; no contradictions with stats |
-| **M5** | The Phones | Mode-driven CPU↔CPU trades; deadline-day event; GM trust storage | Counter-offer search, "what would it take", trade block + offers inbox, Trade Machine UI, trade-request arcs | Same offer twice gives the same answer; counter is always acceptable if proposed as-is |
-| **M6** | The Market | CPU FA with dead money + GM spending tendencies; RFA tenders | Re-sign window, tags, contract structure in `faMarket`, visits, Cap chart | FA soak: no over-cap CPU teams; structure changes acceptance in the direction of `faPreferences` |
-| **M7** | The Staff | Carousel v2 (ages, retire, poaching both ways), staff budget enforcement, development-coach progression hook | Coach ratings/traits/contracts, interview flow, Coaching Tree SVG, tree prestige + legacy achievements | 10-season sim yields realistic trees (some coaches with ≥ 3 HC descendants); user coordinator poached at least once in a strong run |
-| **M8** | The web & polish | Balance soak (10 seasons × 5 seeds), save budget test | Cross-system triggers (§10), delegation for every stage, mobile pass, empty/error states | Save growth ≤ 250 KB; median offseason with full delegation ≤ 90 s of clicks |
+| **M0** | Quick fixes | Deterministic trade acceptance; cap and roster checks in `executeTrade`/`acceptTradeOffer`; timer auto-pick uses the board; remove the random `freeAgencyLogic` path; one pick chart | Fix the `getOvrRange` leak (`hashSeed(id)`); show perceived grade unscouted | A regression test per fix |
+| **M1** | Foundations | `contracts.js` + dead cap + migration; future picks + migration; `assetValue.js` | `offseasonCalendar.js` + Command Center shell; `people.js`; `schemes.js`; `inbox.js` + Phone | Old save loads mid-season, in FA and mid-draft; 5-season soak with no cap drift |
+| **M2** | **Player card** | Expose depth-chart role, injury ETA and snap share as pure selectors | `playerStatus.js`; `components/player/*` family; `PlayerModal` becomes a wrapper; swap in rows, trade, FA, hub | Every status reachable in tests; no header shows > 3 chips; browser check on 1024 px and mobile |
+| **M3** | Scouting | Medicals/injury-proneness truth in progression | `scouting.js` (knowledge, scouts, assignments, combine, interviews, visits, pro personnel, camp reveal); Big Board + Scouting Office | Perceived ≠ true at k=0; range shrinks monotonically; CPU boards differ (Kendall τ < 0.9) |
+| **M4** | Draft Weekend | `cpuMakePick` on per-team boards; draft trade engine; conditional picks; UDFA; 5th-year option; comp picks | Draft Room split, ticker, moments, Draft Card, trade sheet, 3-year re-grade | ≥ 5 R1 picks more than 8 slots off consensus; a full draft sims in < 1 s |
+| **M5** | **X-Factor** | Eligibility and loss inside `progression.js` season end (calls Claude's `xFactor.js`); calibration soak | `xFactor.js` (generator, registry, per-game state); `gameEngine.js` hook points; card foil and Ability panel; Broadcast zone UI; X-Factors page; MatchupPreview "Scheme for him" | Calibration bands in §11.3 hold over 10k games; 50 leagues never duplicate an ability; watch = sim |
+| **M6** | Saturdays | College season sim, early declarations, transfers | `storyArcs.js` + 24 college arcs, Heisman ladder, stock ticker, Saturday choices, Saturdays UI | Class size varies; arcs resolve exactly once across reloads; no stat contradictions |
+| **M7** | The Phones | Mode-driven CPU↔CPU trades; Deadline Day; GM trust storage | Counter search, "what would it take", trade block, Trade Machine, trade-request arcs, rumours | Same offer gives the same answer; counters are always acceptable |
+| **M8** | The Market | CPU FA with dead money and GM spending; RFA tenders; holdout effects on camp development | Re-sign window, tags, structure, agents, visits & pitch, Cap Chart / Waterfall | No over-cap CPU teams in the soak; structure moves acceptance per `faPreferences` |
+| **M9** | The Staff | Carousel v2 (ages, retirement, poaching both ways), staff budget, development-coach hook | Coach ratings/traits/contracts, successor grooming, interview flow, Coaching Tree SVG, prestige + legacy | A 10-season sim yields trees with ≥ 3 HC descendants; a user coordinator is poached at least once in a strong run |
+| **M10** | The web & polish | 10-season × 5-seed balance soak; save-budget test | §12 triggers, delegation for every stage, onboarding, mobile pass, empty/error states | Save growth ≤ 250 KB; median fully-delegated offseason ≤ 90 s of clicks |
 
-Board protocol: each milestone starts with one `CLAIM` line per agent listing files; APIs between agents
-are posted as function signatures before either side builds (as done for K3/C5).
+M2 (player card) moved early because every later milestone renders players through it.
+M5 (X-Factor) needs only M0–M2 and can run in parallel with M3–M4.
+Board protocol: one `CLAIM` line per agent per milestone listing files. Cross-agent APIs are posted as signatures before either side builds. `gameEngine.js` edits (M5) stay Claude-owned per K11.
 
-## 14. Test plan (new files)
+## 18. Open questions for the user
 
-`tests/scouting.mjs` (noise determinism, no truth leakage through any exported UI helper, monotone range),
-`tests/draftWeekend.mjs` (per-team boards, trade-up/down legality, UDFA, future-pick migration),
-`tests/assetValue.mjs` (chart monotonicity, surplus value, mode weights),
-`tests/contracts.mjs` (dead money on cut/trade, tags, options, old-save defaults),
-`tests/tradeNegotiation.mjs` (determinism, counter acceptability, cap legality),
-`tests/collegeSeason.mjs` (standings consistency, declarations, arc exactly-once),
-`tests/coachingTree.mjs` (lineage, poaching, retirement, prestige),
-`tests/offseasonCalendar.mjs` (stage resume after reload at every stage, delegation completes the offseason).
-All are seeded through `tests/helpers/seededRandom.mjs`.
-
-## 15. Open questions for the user
-
-1. **Scope of the college sim**: do you want a lightweight results-and-poll model (planned), or watchable college games through `gameEngine`? The second is much bigger.
-2. **Difficulty knob for fog**: should "Scouting difficulty" (how wide ranges start) be a setting?
-3. **Staff budget**: is a second budget alongside the cap welcome, or should staff be free and limited only by count?
-4. **Order of milestones**: the plan leads with scouting → draft (the most visible fun). If trades are the bigger pain point today, M5 can move ahead of M3; it only needs M0–M1.
+1. **College sim scope**: lightweight results-and-poll (planned), or watchable college games through `gameEngine`? The second is much bigger.
+2. **Fog difficulty**: should the starting range width be a setting?
+3. **Staff budget**: a second budget alongside the cap, or free staff limited by headcount?
+4. **X-Factor count**: is 16 league-wide right (≈ 0.9%), or should it be even rarer (8–10)? Should the user be able to see *exactly* how an opponent's ability triggers, or only after facing him once (fog)?
+5. **Milestone order**: the plan now goes player card → scouting → draft → X-Factor in parallel. If trades are the bigger pain today, M7 can move up; it needs only M0–M1.
