@@ -73,7 +73,8 @@ function profile(plan) {
         const r = simulateGame(home, away, rosters[1], rosters[2], null, null, { homePlan: plan });
         for (const p of readPbp(r.pbp)) {
             if (p.off !== 0) continue;
-            if (p.has(FLAG.FOURTH_GO)) fourthGo++;
+            // Discretionary calls only: late-game "must go" situations are the same for every staff.
+            if (p.has(FLAG.FOURTH_GO) && p.q <= 3) fourthGo++;
             if ([KIND.PASS, KIND.INC, KIND.INT, KIND.SACK, KIND.SCRAMBLE].includes(p.kind)) dropbacks++;
             if ([KIND.PASS, KIND.INC, KIND.INT, KIND.SACK, KIND.SCRAMBLE, KIND.RUN].includes(p.kind)) snaps++;
             if (p.kind === KIND.TWO || p.kind === KIND.TWO_FAIL) twoPt++;

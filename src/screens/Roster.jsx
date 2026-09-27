@@ -8,6 +8,13 @@ import { isActiveXF } from '../engine/xFactor';
 import { StatusPill } from '../components/player/PlayerBits';
 import PlayerFace from '../components/PlayerFace';
 import { characterFor, TRAITS, teamContext, moodFor, contractStance } from '../engine/character';
+import { playStyleFor } from '../engine/playStyles';
+
+/** "🔥 Burner" — the signature play style, falling back to the archetype. */
+const styleText = p => {
+  const s = playStyleFor(p);
+  return s ? `${s.icon} ${s.label}` : p.archetype;
+};
 import {
   PageHeader, Card, CardHeader, CardBody, Button, DataTable, Tabs,
   SegmentedControl, FilterChips, Badge, PositionTag, RarityChip, Meter,
@@ -155,7 +162,7 @@ function PlayerTile({ player, onOpen, selected, onSelect }) {
           </p>
           <div className="mt-1.5 flex items-center gap-1.5">
             <PositionTag position={player.position} />
-            <span className="truncate text-label text-fg-muted">{player.archetype}</span>
+            <span className="truncate text-label text-fg-muted" title={player.archetype}>{styleText(player)}</span>
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -267,7 +274,7 @@ export default function Roster() {
             </p>
             {statusById[p.id]?.primary.rank < 10
               ? <StatusPill status={statusById[p.id].primary} className="mt-0.5 max-w-full truncate" />
-              : <p className="truncate text-label text-fg-muted">#{characterFor(p).number} · {p.archetype}</p>}
+              : <p className="truncate text-label text-fg-muted">#{characterFor(p).number} · {styleText(p)}</p>}
           </div>
         </div>
       ),

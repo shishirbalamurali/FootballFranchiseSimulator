@@ -12,6 +12,7 @@ import { deadMoney } from '../../engine/contracts';
 import { proReport } from '../../engine/scouting';
 import { isActiveXF } from '../../engine/xFactor';
 import { teamFit, fitLabel, SCHEMES, sideOf } from '../../engine/schemes';
+import { playStyleFor } from '../../engine/playStyles';
 import PlayerFace from '../PlayerFace';
 import { Modal, Tabs, Button, Badge, TeamCrest, PositionTag, EmptyState, Stat, getRarity, cx } from '../ui';
 import { OvrRing, StatusPill, Sparkline, AbilityPanel } from './PlayerBits';
@@ -92,6 +93,7 @@ export function PlayerCardBody({ player, teamId, context = {}, onClose }) {
     const stance = own && ctx ? contractStance(livePlayer, ctx) : null;
     const role = roster.length ? roleOf(livePlayer, roster) : null;
     const xf = isActiveXF(livePlayer);
+    const style = playStyleFor(livePlayer);
     const identity = s.frontOffice?.identities?.[s.userTeamId];
     const fit = identity && sideOf(livePlayer.position) ? teamFit(livePlayer, identity) : null;
     const ovrDelta = livePlayer.ovrHistory?.length > 1 ? livePlayer.ovr - livePlayer.ovrHistory.at(-2) : 0;
@@ -130,6 +132,7 @@ export function PlayerCardBody({ player, teamId, context = {}, onClose }) {
                         <PositionTag position={livePlayer.position} />
                         <span className="font-display text-h3 tabular-nums text-fg-muted">#{character.number}</span>
                         {team && <TeamCrest team={team} size="sm" decorative />}
+                        {style && <Badge tone="info" title={style.blurb}>{style.icon} {style.label}</Badge>}
                     </div>
                     <h2 className="break-words font-display text-h2 uppercase leading-none text-fg sm:text-h1">{livePlayer.name}</h2>
                     <p className="truncate text-label text-fg-secondary">

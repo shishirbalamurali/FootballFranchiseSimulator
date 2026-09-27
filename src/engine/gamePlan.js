@@ -13,13 +13,14 @@
 import { PLAYBOOK_MAP, TEAM_PLAYBOOK_MAP } from '../data/playbooks.js';
 import { weeklyStrategy } from './weeklyExperience.js';
 import { OFFENSE_SCHEMES } from './schemes.js'; // CLAUDE: coordinator schemes
+import { gameContext, engineContext, compactContext } from './gameContext.js';
 
 // League-average (passingBoost − rushingBoost) across the 32 schemes, so the
 // tilt moves teams relative to each other without moving league volume.
 const SCHEME_TILT_MEAN = 2.2;
 
 const STRATEGY_PLAN = {
-    aggressive:   { passTilt: 0.05,  aggression: 1.75, deepShots: 0.05,  clockControl: 0 },
+    aggressive:   { passTilt: 0.05,  aggression: 2.0,  deepShots: 0.05,  clockControl: 0 },
     balanced:     { passTilt: 0,     aggression: 1.0,  deepShots: 0,     clockControl: 0.3 },
     conservative: { passTilt: -0.06, aggression: 0.6,  deepShots: -0.03, clockControl: 0.9 },
 };
@@ -62,9 +63,18 @@ export function gamePlanFor(state, teamId) {
     };
 }
 
-/** Both sides' plans, in the shape simulateGame's options take. */
+/**
+ * Both sides' plans, in the shape simulateGame's options take — plus the game
+ * context (division, rivalry, stage, prime time, stakes; see gameContext.js),
+ * which rides along so the store's sim actions need no changes to use it.
+ */
 export function gamePlans(state, homeId, awayId) {
-    return { homePlan: gamePlanFor(state, homeId), awayPlan: gamePlanFor(state, awayId) };
+    let context = null;
+    try {
+        const ctx = gameContext(state, homeId, awayId);
+        if (ctx) context = { ...ctx, engine: engineContext(ctx) };
+    } catch { context = null; }
+    return { homePlan: gamePlanFor(state, homeId), awayPlan: gamePlanFor(state, awayId), context };
 }
 
 /**
@@ -76,7 +86,15 @@ export function gamePlans(state, homeId, awayId) {
 export function gameDetailFields(result, isUserGame) {
     if (!result?.quarters) return {};
     const out = { quarters: result.quarters, scoringLog: result.scoringLog || [] };
-    if (isUserGame && result.pbp) out.pbp = result.pbp;
+    // ~30 bytes on every game: spread, division, rivalry, slot, stage — so any
+    // screen can call an upset after the fact.
+    const ctx = compactContext(result.context);
+    if (ctx) out.ctx = ctx;
+    if (isUserGame && result.pbp) {
+        // The user's broadcast also gets the full storyline (records, stakes, tags).
+        const { engine: _engine, ...story } = result.context || {};
+        out.pbp = result.context ? { ...result.pbp, ctx: story } : result.pbp;
+    }
     // X-Factor moments: who got in the zone (tiny; every game keeps it).
     if (result.xfactor?.length) out.xf = result.xfactor.filter(x => x.activations > 0).map(x => [x.id, x.side, x.activations, x.zoneTds]);
     return out;

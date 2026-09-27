@@ -201,8 +201,9 @@ let _persistTimer = null;
 // is hit we shed the most expendable history and try again rather than give up.
 // Each tier keeps the save playable; only replay detail is lost.
 const SAVE_FALLBACKS = [
-    // 1. Box scores for all but the last four weeks — season totals live on the
-    //    players, so this only costs per-game stat lookups for older weeks.
+    // 1. Box scores (and replay play-by-play, CLAUDE) for all but the last four
+    //    weeks — season totals live on the players, so this only costs
+    //    per-game stat lookups and old broadcasts for older weeks.
     (data) => {
         const schedule = data.schedule || [];
         // The playoff/offseason week counter resets to one. Use the schedule
@@ -212,7 +213,7 @@ const SAVE_FALLBACKS = [
             ...data,
             schedule: schedule.map((week, i) => i >= latestPlayed - 3
                 ? week
-                : (week || []).map(({ playerStats: _ps, stats: _ts, ...game }) => game)),
+                : (week || []).map(({ playerStats: _ps, stats: _ts, pbp: _pbp, ...game }) => game)),
         };
     },
     // 2. All but the two most recent drafts.

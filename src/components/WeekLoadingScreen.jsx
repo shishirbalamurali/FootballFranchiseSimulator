@@ -30,8 +30,18 @@ const TONE_CHIP = {
   fire: 'bg-negative-solid text-n-0',
   ice: 'bg-info-solid text-n-0',
   rout: 'bg-ink text-chalk',
+  upset: 'bg-negative-solid text-n-0',
+  witch: 'bg-witch text-chalk',
   plain: 'bg-surface-sunken text-fg-secondary',
 };
+const SLOT_SHORT = { TNF: 'TNF', SNF: 'SNF', MNF: 'MNF' };
+
+/** Favorite and line from the stored game context, e.g. "BUF −6.5". */
+function lineText(g, away, home) {
+  const s = g.ctx?.s;
+  if (!Number.isFinite(s) || s === 0) return null;
+  return `${(s > 0 ? home : away)?.abbreviation ?? ''} −${Math.abs(s)}`;
+}
 
 function Tile({ row, p, big, isUser, standings }) {
   const { g, tl, hasScore, story } = row;
@@ -45,6 +55,12 @@ function Tile({ row, p, big, isUser, standings }) {
     return s ? `${s.wins}-${s.losses}${s.ties ? `-${s.ties}` : ''}` : '';
   };
   const share = hasScore && (a + h) > 0 ? h / (a + h) : 0.5;
+  // Live upset alert: the underdog leads in the fourth quarter or overtime.
+  const spread = g.ctx?.s;
+  const dogLeads = Number.isFinite(spread) && Math.abs(spread) >= 3 && a !== h && (spread > 0 ? a > h : h > a);
+  const upsetLive = hasScore && !done && dogLeads && (label === 'Q4' || label === 'OT');
+  const storyTone = story && (story.label === 'Witching Hour' ? 'witch' : story.tone);
+  const lineTxt = lineText(g, away, home);
 
   const line = (team, score, side, lost) => (
     <div className="flex min-w-0 items-center gap-2">
@@ -80,10 +96,18 @@ function Tile({ row, p, big, isUser, standings }) {
           done ? 'bg-ink text-chalk' : label === 'OT' ? 'bg-warning-bg text-warning-fg' : 'bg-negative-bg text-negative-fg')}>
           {label}{!done && clock ? ` · ${clock}` : ''}
         </span>
-        {isUser && !done && <span className="text-micro font-semibold uppercase text-team-ink">Your game</span>}
+        {!done && (g.ctx?.t || g.ctx?.d || lineTxt) && !upsetLive && (
+          <span className="flex min-w-0 items-center gap-1 truncate text-micro font-semibold uppercase tabular-nums text-fg-faint">
+            {g.ctx?.t && <span className="rounded-full bg-ink px-1.5 text-chalk">{SLOT_SHORT[g.ctx.t]}</span>}
+            {g.ctx?.d && <span className="rounded-full bg-surface-sunken px-1.5 text-fg-secondary">Div</span>}
+            {lineTxt && <span>{lineTxt}</span>}
+          </span>
+        )}
+        {upsetLive && <span className="animate-pulse rounded-full bg-negative-solid px-2 py-0.5 text-micro font-bold uppercase leading-none text-n-0">🚨 Upset alert</span>}
+        {isUser && !done && !upsetLive && <span className="text-micro font-semibold uppercase text-team-ink">Your game</span>}
         {done && story && (
-          <span className={cx('truncate rounded-full px-2 py-0.5 text-micro font-bold uppercase leading-none', TONE_CHIP[story.tone])}>
-            {story.label}
+          <span className={cx('truncate rounded-full px-2 py-0.5 text-micro font-bold uppercase leading-none', TONE_CHIP[storyTone])}>
+            {story.label === 'Witching Hour' ? '🌙 ' : ''}{story.label}
           </span>
         )}
       </div>
@@ -110,6 +134,12 @@ function Standouts({ rows }) {
     return `${a?.abbreviation} ${r.g.awayScore} – ${h?.abbreviation} ${r.g.homeScore}`;
   };
   const items = [];
+  // The biggest favorite to go down.
+  const upsets = done.filter(r => r.story?.upset && Number.isFinite(r.g.ctx?.s));
+  if (upsets.length) {
+    const u = upsets.reduce((best, r) => (Math.abs(r.g.ctx.s) > Math.abs(best.g.ctx.s) ? r : best), upsets[0]);
+    items.push([`${u.g.ctx.d ? 'Division upset' : 'Upset'} of the week`, `${txt(u)} (+${Math.abs(u.g.ctx.s)})`]);
+  }
   const comeback = pick(r => r.story?.maxDeficit || 0);
   if ((comeback.story?.maxDeficit || 0) >= 10) items.push(['Biggest comeback', `${txt(comeback)} (down ${comeback.story.maxDeficit})`]);
   const shoot = pick(total);
