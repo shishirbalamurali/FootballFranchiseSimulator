@@ -90,6 +90,19 @@
   --rarity-legend:      #d8401c;
   --rarity-legend-wash: rgba(255, 94, 58, 0.18);
 
+  /* X-Factor: electric gold into violet, used only for the X-Factor tier. */
+  --xfactor:       #b8860b;
+  --xfactor-2:     #7a2fd6;
+  --xfactor-wash:  rgba(214, 160, 20, 0.16);
+  --xfactor-glow:  rgba(255, 196, 40, 0.55);
+
+  /* Player status tones (status band on player cards). */
+  --status-danger:  var(--negative-solid);
+  --status-warning: var(--warning-solid);
+  --status-positive: var(--positive-solid);
+  --status-info:    var(--info-solid);
+  --status-neutral: var(--border-default);
+
   /* ── Team theme — set once by ThemeProvider, never recomputed per file ── */
   --team-primary:      #e8552b;
   --team-secondary:    #16254a;

@@ -76,6 +76,8 @@ export default {
           legend: 'var(--rarity-legend)',
         },
 
+        xfactor: { DEFAULT: 'var(--xfactor)', 2: 'var(--xfactor-2)', wash: 'var(--xfactor-wash)', glow: 'var(--xfactor-glow)' },
+        status: { danger: 'var(--status-danger)', warning: 'var(--status-warning)', positive: 'var(--status-positive)', info: 'var(--status-info)', neutral: 'var(--status-neutral)' },
         ink: 'var(--ink)',
         chalk: 'var(--chalk)',
         turf: { DEFAULT: 'var(--turf)', stripe: 'var(--turf-stripe)', line: 'var(--turf-line)', ball: 'var(--pigskin)', first: 'var(--first-down)' },
@@ -171,6 +173,8 @@ export default {
         wobble:    { '0%,100%': { transform: 'rotate(-2deg)' }, '50%': { transform: 'rotate(2deg)' } },
         'bounce-in': { '0%': { opacity: '0', transform: 'scale(.8) rotate(-3deg)' }, '60%': { opacity: '1', transform: 'scale(1.04) rotate(1deg)' }, '100%': { transform: 'none' } },
         'stripe-slide': { to: { backgroundPosition: '28px 0' } },
+        'zone-pulse': { '0%,100%': { boxShadow: '0 0 0 0 var(--xfactor-glow)' }, '50%': { boxShadow: '0 0 0 8px transparent' } },
+        'reveal-flip': { from: { transform: 'rotateY(90deg)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
       },
       animation: {
         'fade-up': 'fade-up var(--dur-base) var(--ease-out) both',
@@ -180,6 +184,8 @@ export default {
         wobble:    'wobble 2.4s ease-in-out infinite',
         'bounce-in': 'bounce-in 420ms var(--ease-out) both',
         'stripe-slide': 'stripe-slide 1s linear infinite',
+        'zone-pulse': 'zone-pulse 1.6s ease-in-out infinite',
+        'reveal-flip': 'reveal-flip 520ms var(--ease-bounce) both',
       },
     },
   },

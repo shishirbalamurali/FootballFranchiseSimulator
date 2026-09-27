@@ -3,9 +3,8 @@
 //
 // playerStatus(player, ctx) → { primary, secondary[], tone, headline, actions[] }
 // Statuses are ranked; the card shows the primary and at most two more.
-import { moodFor, roleOf, wantsOut } from './character.js';
+import { moodFor, roleOf, wantsOut, contractStance } from './character.js';
 import { isActiveXF } from './xFactor.js';
-import { contractStance } from './character.js';
 
 export const STATUS = {
     injured: { id: 'injured', label: 'Injured', icon: '🩹', tone: 'danger', rank: 1 },
@@ -28,10 +27,10 @@ export const STATUS = {
 };
 
 const POS_NAME = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', OL: 'OL', DL: 'DL', LB: 'LB', CB: 'CB', S: 'S', K: 'K', P: 'P' };
-const perGame = (s, key) => (s?.[key] || 0) / Math.max(1, s?.gamesPlayed || s?.games || 1);
+const perGame = (s, key, teamGames) => (s?.[key] || 0) / Math.max(1, s?.gamesPlayed || s?.games || teamGames || 1);
 
 /** A quick read of recent form from the last few box scores ([] when unknown). */
-export function recentForm(player, games = []) {
+export function recentForm(player, games = [], teamGames = 0) {
     const lines = games.map(g => g.line).filter(Boolean);
     if (lines.length < 2) return null;
     const key = { QB: 'yards', RB: 'rushYards', WR: 'recYards', TE: 'recYards' }[player.position]
@@ -39,7 +38,7 @@ export function recentForm(player, games = []) {
     if (!key) return null;
     const vals = lines.map(l => l[key] || 0);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const base = perGame(player.stats?.season, key) || avg;
+    const base = perGame(player.stats?.season, key, teamGames) || avg;
     return { key, values: vals, avg, base, ratio: base ? avg / base : 1 };
 }
 
@@ -82,7 +81,7 @@ export function playerStatus(player, ctx = {}) {
             try { ask = contractStance(player, { roster, games: 0, winPct: 0.5 }).ask; } catch { /* derived only */ }
             add('walkYear', `Final year${ask ? ` · asks about $${ask}M/yr` : ''}`, [{ id: 'extend', label: 'Extend' }, { id: 'shop', label: 'Shop' }]);
         }
-        const form = recentForm(player, ctx.recent || []);
+        const form = recentForm(player, ctx.recent || [], ctx.games || 0);
         if (form && form.ratio >= 1.35 && form.avg > 0) add('hot', `Averaging ${Math.round(form.avg)} ${form.key === 'yards' ? 'pass yds' : form.key === 'rushYards' ? 'rush yds' : form.key === 'recYards' ? 'rec yds' : 'tackles'} lately`);
         else if (form && form.ratio <= 0.6 && form.base > 0) add('slump', `Well below his season pace lately`);
         if ((player.experience ?? 1) === 0 || player.draftYear === (ctx.year || 0) + (ctx.phase === 'regular' ? 0 : 1)) {

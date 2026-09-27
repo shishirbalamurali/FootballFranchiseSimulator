@@ -132,6 +132,20 @@ export const frontOfficeActions = (set, get) => ({
         let next = { collegePipeline: pipeline, college, scouting };
         let rosters = s.rosters, owners = s.draftPickOwners, teamRatings = s.teamRatings;
         let foNext = { ...fo, lastWeekRun: stamp };
+        // X-Factor zone stats from this week's games (levels come from zone TDs).
+        if (s.phase === 'regular') {
+            const credit = {};
+            for (const g of s.schedule?.[played - 1] || []) for (const [id, side, acts, tds] of g.xf || []) {
+                const tid = side === 0 ? g.homeTeamId : g.awayTeamId;
+                (credit[tid] ||= {})[id] = [acts, tds];
+            }
+            if (Object.keys(credit).length) {
+                rosters = { ...rosters };
+                for (const [tid, byId] of Object.entries(credit)) {
+                    rosters[tid] = (rosters[tid] || []).map(p => byId[p.id] && p.xFactor ? { ...p, xFactor: { ...p.xFactor, zoneTds: (p.xFactor.zoneTds || 0) + byId[p.id][1], zones: (p.xFactor.zones || 0) + byId[p.id][0] } } : p);
+                }
+            }
+        }
         // 3. The trade market (regular season, before the deadline).
         if (s.phase === 'regular' && played >= 2 && played <= TRADE_DEADLINE_WEEK) {
             const live = { ...s, rosters, draftPickOwners: owners, frontOffice: foNext };
@@ -687,6 +701,11 @@ export const frontOfficeActions = (set, get) => ({
         set({ coachingStaff, franchiseStories: [{ year: s.year, kind: 'Coaching', text: `${c.name} joins your staff as ${role}.` }, ...(s.franchiseStories || [])].slice(0, 300) });
         get().foRefreshIdentities();
         return { ok: true };
+    },
+    /** Weekly prep: scheme for one opposing X-Factor this week (null to clear). */
+    foSchemeFor: (playerId) => {
+        const s = get();
+        set({ frontOffice: { ...s.frontOffice, schemeFor: playerId ? { year: s.year, week: s.week, playerId } : null } });
     },
     foSetSuccessor: (coachId) => {
         const fo = get().frontOffice;

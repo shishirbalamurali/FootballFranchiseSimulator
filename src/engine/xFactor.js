@@ -220,7 +220,7 @@ export function seasonImpact(p) {
 }
 
 /** Minimum impact to qualify, by position family (about a top-3 season). */
-const QUALIFY = { QB: 90, RB: 70, WR: 70, TE: 50, OL: 34, DL: 55, LB: 50, CB: 40, S: 38, K: 44 };
+export const QUALIFY = { QB: 90, RB: 70, WR: 70, TE: 50, OL: 34, DL: 55, LB: 50, CB: 40, S: 38, K: 44 };
 
 /**
  * Season-end X-Factor pass over the league. Returns { rosters, awakened,
@@ -312,7 +312,7 @@ export function createXFactorGame(teams, opts = {}) {
     });
     const log = [];
     const boost = [0, 0]; // momentum drives remaining
-    const any = units[0].length + units[1].length > 0;
+    const any = units[0].length + units[1].length > 0 || !!(opts.focus?.[0] || opts.focus?.[1]);
 
     const holds = (u, s) => TRIGGERS[u.a.trigger].test(s) || (u.a.secondTrigger && TRIGGERS[u.a.secondTrigger].test(s));
     const ctxFor = (u, sit) => ({ ...sit, defense: u.side !== sit.offense, lead: sit.lead[u.side], away: u.side === 1, playoff: !!opts.playoff });
@@ -349,6 +349,10 @@ export function createXFactorGame(teams, opts = {}) {
                 u.fired++;
             }
         }
+        // The cost of scheming for one player: everyone else finds a little room.
+        const focuser = 1 - sit.offense;
+        const focus = opts.focus?.[focuser];
+        if (focus && (stat === 'pCmp' || stat === 'runYds') && actors.target !== focus && actors.carrier !== focus && actors.qb !== focus) m *= 1.03;
         // Momentum: the offense rides a teammate's zone touchdown for a drive.
         if (boost[sit.offense] > 0 && (stat === 'pCmp' || stat === 'runYds')) m *= 1.03;
         // Aura: the opponent's offense tightens up.
@@ -418,7 +422,9 @@ export function createXFactorGame(teams, opts = {}) {
                 if (act.drive && type === 'driveEnd' && info.side === side) u.armed = 0;
                 if (!counts) continue;
                 u.armed++;
-                const need = Math.max(1, act.n - (u.a.twist.id === 'clutchGene' && opts.playoff ? 1 : 0));
+                // "Scheme for him": the opponent's game plan costs him one more event.
+                const schemed = opts.focus?.[1 - side] === u.p.id ? 1 : 0;
+                const need = Math.max(1, act.n + schemed - (u.a.twist.id === 'clutchGene' && opts.playoff ? 1 : 0));
                 if (u.armed >= need) activate(u, sit);
                 else if (u.armed === need - 1) log.push([sit.q, sit.clock, u.side, u.p.id, 'armed']);
             }

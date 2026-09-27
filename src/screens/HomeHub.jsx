@@ -252,7 +252,7 @@ export default function HomeHub({ onNavigate, pendingIntent, onIntentHandled }) 
   const handleOffseasonPrimary = () => {
     if (phase === 'playoffs') return onNavigate('playoffs');
     if (phase === 'draft') return onNavigate('draft');
-    if (phase === 'offseason') { useGameStore.getState().startFreeAgency(); return onNavigate('freeAgency'); }
+    if (phase === 'offseason') return onNavigate('command'); // CLAUDE: the Command Center runs the offseason
     if (phase === 'freeAgency') return onNavigate('freeAgency');
     return undefined;
   };

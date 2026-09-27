@@ -1,4 +1,13 @@
-import { Assistants, CoachingStaff, CollegeWatch, FranchiseJournal } from './screens/FranchiseOffice';
+import { Assistants, FranchiseJournal } from './screens/FranchiseOffice';
+import CommandCenter from './screens/frontOffice/CommandCenter';
+import BigBoard from './screens/frontOffice/BigBoard';
+import Contracts from './screens/frontOffice/Contracts';
+import Saturdays from './screens/frontOffice/Saturdays';
+import XFactors from './screens/frontOffice/XFactors';
+import TradeMachine from './screens/frontOffice/TradeMachine';
+import Staff from './screens/frontOffice/Staff';
+import PlayerCardHost from './components/player/PlayerCardHost';
+import { useNav } from './components/player/cardStore';
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import ThemeProvider from './components/ThemeProvider';
 import ModeSelectScreen from './components/ModeSelectScreen';
@@ -12,7 +21,6 @@ import Stats from './screens/Stats';
 import Playoffs from './screens/Playoffs';
 import Awards from './screens/Awards';
 import Playbook from './screens/Playbook';
-import TradeCenter from './screens/TradeCenter';
 import FreeAgency from './screens/FreeAgency';
 import Development from './screens/Development';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -163,6 +171,7 @@ export default function App() {
   // Dev-only: jump to any screen from the console, e.g. __go('roster').
   useEffect(() => {
     if (import.meta.env.DEV) { window.__go = setCurrentScreen; window.__store = useGameStore; }
+    useNav.getState().register(setCurrentScreen);
   }, []);
 
   const userStanding = standings?.[userTeamId];
@@ -241,8 +250,12 @@ export default function App() {
     switch (currentScreen) {
       case 'home':        return <HomeHub onNavigate={setCurrentScreen} pendingIntent={pendingIntent} onIntentHandled={() => setPendingIntent(null)} />;
       case 'assistants': return <Assistants />;
-      case 'staff': return <CoachingStaff />;
-      case 'college': return <CollegeWatch />;
+      case 'staff': return <Staff />;
+      case 'college': return <Saturdays />;
+      case 'command': return <CommandCenter onNavigate={setCurrentScreen} />;
+      case 'bigBoard': return <BigBoard onNavigate={setCurrentScreen} />;
+      case 'contracts': return <Contracts onNavigate={setCurrentScreen} />;
+      case 'xfactors': return <XFactors />;
       case 'journal': return <FranchiseJournal />;
       case 'standings':   return <Standings />;
       case 'roster':      return <Roster />;
@@ -251,17 +264,14 @@ export default function App() {
       case 'stats':      return <Stats />;
       case 'awards':     return <Awards onBack={() => setCurrentScreen('home')} />;
       case 'playbook':   return <Playbook />;
-      case 'trade':      return <TradeCenter />;
+      case 'trade':      return <TradeMachine />;
       case 'draft':
         return <Draft onNavigate={setCurrentScreen} />;
       case 'playoffs':
         return (
           <Playoffs
             onBack={() => setCurrentScreen('home')}
-            onStartOffseason={() => {
-              useGameStore.getState().startFreeAgency();
-              setCurrentScreen('freeAgency');
-            }}
+            onStartOffseason={() => setCurrentScreen('command')}
           />
         );
       case 'freeAgency':
@@ -312,6 +322,7 @@ export default function App() {
           <OwnerWatcher />
           <LegacyWatcher />
           <OwnerReviewModal />
+          <PlayerCardHost />
 
         </div>
       </ErrorBoundary>

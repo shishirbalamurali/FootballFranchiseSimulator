@@ -9,6 +9,7 @@ import {
   primaryActionFor, PHASE_LABELS,
 } from '../navigation';
 import SettingsModal from './SettingsModal';
+import PhoneButton from './frontOffice/Phone';
 
 const ICONS = {
   IconHub, IconTeam, IconLeague, IconOffice, IconAwards,
@@ -110,6 +111,9 @@ export default function AppNav({
           >
             {action.label}
           </Button>
+
+          {/* The front-office phone: trade calls, agents, decisions. */}
+          <PhoneButton />
 
           {/* Settings — sim speed plus the destructive/save controls, kept
               out of the page header next to the team name. */}
