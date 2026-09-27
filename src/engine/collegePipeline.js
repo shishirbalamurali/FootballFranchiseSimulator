@@ -2,6 +2,8 @@ import { generateDraftClass, generateScoutReport } from './draft';
 import { generatePlayer, devTraitForPotential } from './player';
 import { collegeProfile } from './draftExperience';
 import { collegeProduction, collegeSeasonArc } from './collegeProduction';
+import { schoolFor, isPowerSchool, eventText, storyLabel, STORY_MARK } from './collegeSeason'; // CLAUDE: fictional schools, story beats
+import { perceive } from './scouting'; // CLAUDE: public grade, never the truth
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 function hash(value) { let n = 0; for (const c of value) n = (n * 31 + c.charCodeAt(0)) >>> 0; return n; }
 export const collegeTier = ceiling => ceiling >= 97 ? 'Generational' : ceiling >= 90 ? 'Elite' : ceiling >= 80 ? 'Good' : 'Normal';
@@ -9,11 +11,15 @@ function cohort(draftYear) {
     return generateDraftClass(draftYear).map((p, i) => {
         const rare = Math.random() < 0.002;
         const ceiling = rare ? 98 : Math.min(96, p.pot);
-        return { id: `college-${draftYear}-${i}`, name: p.name, position: p.position,
-            school: p.college, entryYear: draftYear - 4, draftYear, ceiling,
-            readyOvr: rare ? 81 : p.ovr, tier: collegeTier(ceiling), seasons: [],
+        const id = `college-${draftYear}-${i}`;
+        const school = schoolFor(id); // CLAUDE
+        // Recruiting rankings are a noisy public projection of the ceiling. // CLAUDE
+        const publicCeiling = ceiling + (hash(`${id}-recruit`) % 9) - 4; // CLAUDE
+        return { id, name: p.name, position: p.position,
+            school, entryYear: draftYear - 4, draftYear, ceiling,
+            readyOvr: rare ? 81 : p.ovr, tier: collegeTier(publicCeiling), seasons: [],
             arc: ['Late bloomer', 'Hometown recruit', 'Film-room student', 'Under the spotlight'][i % 4],
-            events: [{ year: draftYear - 4, week: 1, text: `Arrived at ${p.college} as ${collegeTier(ceiling) === 'Elite' ? 'an' : 'a'} ${collegeTier(ceiling).toLowerCase()} recruiting prospect. A projection, not a guarantee.` }] };
+            events: [{ year: draftYear - 4, week: 1, text: `Arrived at ${school} as ${collegeTier(publicCeiling) === 'Elite' ? 'an' : 'a'} ${collegeTier(publicCeiling).toLowerCase()} recruiting prospect. A projection, not a guarantee.` }] };
     });
 }
 export function updateCollege(pipeline, year, week) {
@@ -26,11 +32,11 @@ export function updateCollege(pipeline, year, week) {
         const events = [...p.events];
         let readyOvr = p.readyOvr;
         const arc = collegeSeasonArc(p, year);
-        if (week >= 12 && !events.some(e => e.year === year && e.week === 12)) {
+        if (week >= 12 && !events.some(e => e.year === year && e.week === 12 && !e.text.startsWith(STORY_MARK))) { // CLAUDE: story beats don't count
             const text = arc === 0 ? `Missed two games with an ankle injury at ${p.school}. Evaluators want to see his recovery.` : arc <= 2 ? `Won a larger role at ${p.school}; his development is outpacing expectations.` : arc === 3 ? `Struggled with consistency at ${p.school}; scouts are lowering his readiness projection.` : `Built another season of film at ${p.school}; ${year === p.draftYear - 1 ? 'the final college audition is underway.' : 'evaluators want to see the next step.'}`;
             events.push({ year, week: 12, text });
         }
-        if (week >= 18 && !events.some(e => e.year === year && e.week === 18)) {
+        if (week >= 18 && !events.some(e => e.year === year && e.week === 18 && !e.text.startsWith(STORY_MARK))) { // CLAUDE
             readyOvr = clamp(p.readyOvr + (arc <= 2 && arc > 0 ? 2 : arc === 0 || arc === 3 ? -2 : 0), 40, Math.min(85, p.ceiling));
             events.push({ year, week: 18, text: year === p.draftYear - 1 ? 'College career complete. Entering the professional draft with four seasons of film.' : 'Returning to campus for another season of development.' });
         }
@@ -53,10 +59,10 @@ export function collegeDraftClass(pipeline, draftYear) {
         const player = generatePlayer(p.position, clamp(p.readyOvr + variation, 40, 85), 22);
         const profile = collegeProfile(player, draftYear, hash(p.id));
         return { ...player, id: p.id, collegeId: p.id, name: p.name, pot: Math.max(player.ovr, p.ceiling), devTrait: devTraitForPotential(p.ceiling),
-            college: p.school, collegeRecruitTier: p.tier, collegeStory: p.events,
-            collegeProfile: { ...profile, school: p.school, seasons: p.seasons.map(({ year, games, stats }) => ({ year, games, ...stats })), headline: p.arc, story: p.events.map(e => `${e.year}: ${e.text}`).join(' ') },
+            college: p.school, collegeRecruitTier: p.tier, collegeStory: p.events.map(e => ({ ...e, text: eventText(p, e) })), // CLAUDE: render story markers
+            collegeProfile: { ...profile, school: p.school, competition: isPowerSchool(p.school) ? 'Power conference' : 'Group of Five / FCS', seasons: p.seasons.map(({ year, games, stats }) => ({ year, games, ...stats })), headline: storyLabel(p) || p.arc, story: p.events.map(e => `${e.year}: ${eventText(p, e)}`).join(' ') }, // CLAUDE
             experience: 0, contract: null, draftStatus: 'available',
-            grade: Math.round(player.ovr * .45 + p.ceiling * .55), scoutReport: generateScoutReport(player),
+            grade: perceive({ id: p.id, ovr: player.ovr, pot: Math.max(player.ovr, p.ceiling) }, { teamId: 'public', k: 35 }).grade, scoutReport: generateScoutReport(player),
             combineSpeed: Math.max(4.25, 5.5 - (player.attributes?.universal?.speed || 60) * .012).toFixed(2),
             combineVert: Math.round(20 + (player.attributes?.universal?.acceleration || 60) * .18),
             combineStrength: Math.round(8 + (player.attributes?.universal?.strength || 60) * .25) };

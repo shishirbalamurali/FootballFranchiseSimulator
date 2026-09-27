@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node tests/regression.mjs && node tests/calibration.mjs && node tests/franchise-systems.mjs && node tests/owner.mjs && node tests/rivalries.mjs && node tests/weekly-experience.mjs && node tests/team-branding.mjs",
+    "test": "node tests/regression.mjs && node tests/calibration.mjs && node tests/franchise-systems.mjs && node tests/owner.mjs && node tests/rivalries.mjs && node tests/weekly-experience.mjs && node tests/team-branding.mjs && node tests/character.mjs && node tests/scoringPlays.mjs && node tests/faMarket.mjs && node tests/franchiseLore.mjs && node tests/gameEngine.mjs && node tests/xFactor.mjs && node tests/frontOffice.mjs",
     "test:calibration": "node tests/calibration.mjs"
   },
   "dependencies": {

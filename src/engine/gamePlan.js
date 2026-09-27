@@ -61,5 +61,7 @@ export function gameDetailFields(result, isUserGame) {
     if (!result?.quarters) return {};
     const out = { quarters: result.quarters, scoringLog: result.scoringLog || [] };
     if (isUserGame && result.pbp) out.pbp = result.pbp;
+    // X-Factor moments: who got in the zone (tiny; every game keeps it).
+    if (result.xfactor?.length) out.xf = result.xfactor.filter(x => x.activations > 0).map(x => [x.id, x.side, x.activations, x.zoneTds]);
     return out;
 }

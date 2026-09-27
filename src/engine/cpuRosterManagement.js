@@ -12,6 +12,9 @@ const missingSlots = (roster, target) => {
 export function rookieReserve(picks = []) {
     // Upper bound within each round; pick trades during the draft are checked
     // again when the post-draft roster is balanced.
+    // CLAUDE: clubs now hold future picks; only the next draft costs cap now.
+    const next = Math.min(...picks.map(p => p.year ?? Infinity));
+    picks = picks.filter(p => (p.year ?? next) === next);
     return picks.reduce((sum,p) => sum + Math.round(Math.max(.8,10/Math.pow(1+((p.round-1)*32)/8,.7))*100)/100,0);
 }
 

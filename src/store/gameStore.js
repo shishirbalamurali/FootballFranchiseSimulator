@@ -26,6 +26,11 @@ import { createOwnerState, generateSeasonGoals, teamRank, buildOwnerContext, rev
 import { newlyUnlocked } from '../engine/legacy'; // CLAUDE
 import { openMarket, resolveMarketDay, offerBudget, validateOffer, askOf, preferredYears, FA_DAYS } from '../engine/faMarket'; // CLAUDE
 import { contractStance, teamContext, tradeFallout } from '../engine/character'; // CLAUDE
+import { FRONT_OFFICE_DEFAULTS, FRONT_OFFICE_FRESH, frontOfficeActions, deadCapNow } from './frontOfficeSlice'; // CLAUDE: front office
+import { boardFor } from '../engine/scouting'; // CLAUDE: CPU clubs draft from their own boards
+import { eventText } from '../engine/collegeSeason'; // CLAUDE
+import { rollPicks, ownerOf, packPicks, unpackPicks } from '../engine/picks'; // CLAUDE: future picks
+import { rosterSalary as foRosterSalary } from '../engine/cpuRosterManagement'; // CLAUDE
 
 // Fast lookups + cloning for simulation hot paths
 const TEAM_MAP = new Map(TEAMS.map(t => [t.id, t]));
@@ -90,6 +95,7 @@ function gameDayRoster(roster, teamId, state) {
     if (!roster) return [];
     roster = battleGameRoster(roster, teamId, state);
     const out = new Set((state.injuries || []).filter(i => i.teamId === teamId && i.weeksRemaining > 0).map(i => i.playerId));
+    if (teamId === state.userTeamId) for (const [id, h] of Object.entries(state.frontOffice?.holdouts || {})) if (h.year === state.year && state.week <= 4) out.add(id); // CLAUDE: holdouts sit
     const penalties = new Map();
     if (teamId === state.userTeamId) {
         for (const b of state.activeBoosts || []) {
@@ -246,6 +252,7 @@ function flushPersist() {
 
     data.collegePipeline = packCollege(data.collegePipeline);
     data.collegeAlumni = packCollege(data.collegeAlumni);
+    data.draftPickOwners = packPicks(data.draftPickOwners); // CLAUDE
     for (let tier = 0; tier <= SAVE_FALLBACKS.length; tier++) {
         try {
             localStorage.setItem(slotKey(slot), JSON.stringify(data));
@@ -401,11 +408,12 @@ const defaultState = {
     achievements: {}, // { [id]: { year, week, teamId } } — see engine/legacy.js
     legacyMeta: null, // { tenure: [{ teamId, from }] }
     faMarket: null, // { year, teamId, day, offers, floors, log, closed } — see engine/faMarket.js
+    ...FRONT_OFFICE_DEFAULTS, // frontOffice, scouting, college — see store/frontOfficeSlice.js
     // ===== END CLAUDE =====
 };
 
 // Claude-owned fields reset when a new franchise starts in the same slot.
-const CLAUDE_FRESH_FRANCHISE = { owner: null, achievements: {}, legacyMeta: null, faMarket: null };
+const CLAUDE_FRESH_FRANCHISE = { owner: null, achievements: {}, legacyMeta: null, faMarket: null, ...FRONT_OFFICE_FRESH };
 
 const SAVE_VERSION = 6;
 
@@ -423,7 +431,7 @@ function migrateSave(saved) {
         if (!r || r.winner || !r.champion) return h;
         return { ...h, seasonRecap: { ...r, winner: r.champion.id } };
     });
-    return refreshSavedTeamBranding({ ...saved, seasonHistory, collegePipeline: unpackCollege(saved.collegePipeline), collegeAlumni: unpackCollege(saved.collegeAlumni) });
+    return refreshSavedTeamBranding({ ...saved, seasonHistory, collegePipeline: unpackCollege(saved.collegePipeline), collegeAlumni: unpackCollege(saved.collegeAlumni), draftPickOwners: unpackPicks(saved.draftPickOwners) }); // CLAUDE: picks packed
 }
 
 // Merge saved state on top of defaults so new fields always have values
@@ -439,6 +447,7 @@ export const useGameStore = create((set, get) => ({
         if (!s.coachingStaff?.length) patch.coachingStaff = createStaff(TEAMS, s.year, s.userTeamId, s.coach);
         if (!s.collegePipeline?.length) patch.collegePipeline = createCollegePipeline(s.year);
         if (Object.keys(patch).length) set(patch);
+        get().foEnsure?.(); // CLAUDE: front office defaults and migrations
     },
     setAssistantSettings: patch => {
         const old = get().assistantSettings || ASSISTANT_DEFAULTS;
@@ -1169,9 +1178,9 @@ export const useGameStore = create((set, get) => ({
             persist('gridiron_save_v3', newState);
             return newState;
         });
-        // Possibly generate a CPU trade offer after simming the week
-        get().runLeagueTrades();
-        get().maybeGenerateCPUTradeOffer();
+        // CLAUDE: the front-office week (league trades, calls, scouting, college Saturday)
+        // replaces runLeagueTrades + maybeGenerateCPUTradeOffer.
+        get().foAfterWeek();
     },
 
     advanceWeek: () => {
@@ -1300,6 +1309,11 @@ export const useGameStore = create((set, get) => ({
         const newRatings = {};
         TEAMS.forEach(t => { newRatings[t.id] = calculateTeamRatings(newRosters[t.id] || []); });
 
+        // CLAUDE (M0): neither club may end up over the cap unless the trade lowers its payroll.
+        for (const team of [userTeamId, cpuTeamId]) {
+            const before = foRosterSalary(rosters[team] || []), after = foRosterSalary(newRosters[team] || []);
+            if (after > CAP_TOTAL && after > before) return false;
+        }
         const newState = { ...get(), rosters: newRosters, draftPickOwners: newPickOwners, teamRatings: newRatings };
         set(newState);
         persist('gridiron_save_v3', newState);
@@ -1628,6 +1642,7 @@ export const useGameStore = create((set, get) => ({
         // Rival clubs fill their rosters before the draft even if the user
         // never pressed "Sim rival signings".
         if (get().phase === 'freeAgency' && !get().cpuSigningsDone) get().simCPUSignings();
+        get().foCompPicks?.(); // CLAUDE: compensatory picks from the FA market
         // Reuse draft class if already generated via pre-draft scouting
         get().ensureFranchiseSystems();
         const existingClass = get().draftClass;
@@ -1640,21 +1655,14 @@ export const useGameStore = create((set, get) => ({
         // Build draft order respecting pick trades
         // draftPickOwners: { receivingTeamId: [{ round, originalTeamId }] }
         const draftOrder = [];
+        const draftYear = get().year + 1; // CLAUDE: picks carry years; comp picks close rounds 3-7
         for (let r = 1; r <= 7; r++) {
             teamsSorted.forEach(originalTeamId => {
-                // Default: team owns its own pick
-                let ownerTeamId = originalTeamId;
-                if (draftPickOwners) {
-                    // Check if any team has received this team's pick for this round
-                    for (const [receivingTeamId, picksOwned] of Object.entries(draftPickOwners)) {
-                        if (Array.isArray(picksOwned) && picksOwned.some(p => p.originalTeamId === originalTeamId && p.round === r)) {
-                            ownerTeamId = receivingTeamId;
-                            break;
-                        }
-                    }
-                }
-                draftOrder.push({ teamId: ownerTeamId, originalTeamId, round: r });
+                draftOrder.push({ teamId: ownerOf(draftPickOwners || {}, originalTeamId, r, draftYear), originalTeamId, round: r, year: draftYear });
             });
+            for (const [teamId, picks] of Object.entries(draftPickOwners || {})) {
+                for (const p of (picks || []).filter(p => p.comp && p.year === draftYear && p.round === r)) draftOrder.push({ teamId, originalTeamId: p.originalTeamId, round: r, year: draftYear, comp: p.comp });
+            }
         }
 
         let pickCounter = 1;
@@ -1723,7 +1731,7 @@ export const useGameStore = create((set, get) => ({
         if (!before.draftOrder[before.currentPickIndex] || before.draftOrder[before.currentPickIndex].teamId === before.userTeamId) return;
         get().maybeDraftTrade();
         const state = get(), pick = state.draftOrder[state.currentPickIndex];
-        const prospect = cpuMakePick(state.rosters[pick.teamId] || [], state.draftClass, TEAM_MAP.get(pick.teamId)?.draftStyle);
+        const prospect = cpuMakePick(state.rosters[pick.teamId] || [], boardFor(pick.teamId, state.draftClass), TEAM_MAP.get(pick.teamId)?.draftStyle); // CLAUDE: its own board
         if (prospect) get().makePick(prospect.id);
     },
 
@@ -1739,11 +1747,9 @@ export const useGameStore = create((set, get) => ({
         } else {
             // Time expired! Auto-pick for user if it's their turn
             if (draftOrder[currentPickIndex]?.teamId === userTeamId) {
-                // Auto pick best available
-                const { draftClass } = get();
-                // Simple: pick highest OVR (copy first — don't mutate state in place)
-                const bestAvailable = [...draftClass].sort((a, b) => b.ovr - a.ovr)[0];
-                if (bestAvailable) get().makePick(bestAvailable.id);
+                // CLAUDE (M0): the war room takes the top name on YOUR board, never the hidden true rating.
+                const best = get().foBestAvailable();
+                if (best) get().foUserPick(best);
             }
         }
     },
@@ -1828,7 +1834,7 @@ export const useGameStore = create((set, get) => ({
         if (salary < minimum) {
             return { accepted: false, reason: `${player.name} turned it down — he wants at least $${minimum}M a year for ${years} years.` };
         }
-        const capAfter = roster.reduce((sum, p) => sum + (p.id === playerId ? salary : (p.contract?.salary || 2)), 0);
+        const capAfter = roster.reduce((sum, p) => sum + (p.id === playerId ? salary : (p.contract?.salary || 2)), 0) + (teamId === get().userTeamId ? deadCapNow(get()) : 0); // CLAUDE: dead money
         // A team already over the cap can still extend someone at a pay cut.
         if (capAfter > CAP_TOTAL && salary > (player.contract?.salary || 2)) {
             return { accepted: false, reason: `That deal would put you $${Math.round(capAfter - CAP_TOTAL)}M over the cap.` };
@@ -1836,7 +1842,7 @@ export const useGameStore = create((set, get) => ({
 
         const newRosters = { ...rosters, [teamId]: roster.map(p =>
             p.id === playerId
-                ? { ...p, contract: { salary, years, yearsLeft: years } }
+                ? { ...p, contract: { salary, years, yearsLeft: years, type: 'veteran', signedYear: get().year } } // CLAUDE
                 : p
         )};
         set({ rosters: newRosters });
@@ -1847,13 +1853,14 @@ export const useGameStore = create((set, get) => ({
         if (get().phase !== 'playoffs') return;
         get().ensureFranchiseSystems();
         get().runAssistants();
+        get().foSeasonEnd(); // CLAUDE: X-Factor awards, college finale (before progression)
         const { rosters, season, year, phase } = get();
         // Progression, contract expiry and ageing happen exactly once a year.
         if (phase !== 'playoffs') return;
 
         const carousel = coachingCarousel(get().coachingStaff, TEAMS, get().standings, get().userTeamId, year);
         const completedCollege = updateCollege(get().collegePipeline, year, 18);
-        const watchedStories = completedCollege.filter(p => get().collegeWatchlist.includes(p.id)).map(p => ({ year, kind: 'College', text: `${p.name} (${p.school}): ${p.events.at(-1)?.text}` }));
+        const watchedStories = completedCollege.filter(p => get().collegeWatchlist.includes(p.id)).map(p => ({ year, kind: 'College', text: `${p.name} (${p.school}): ${eventText(p, p.events.at(-1))}` })); // CLAUDE: render story markers
         const nextStories = [...carousel.stories.map(text => ({ year, kind: 'Coaching', text })), ...watchedStories, ...get().franchiseStories].slice(0, 300);
         // Run season progression for all players
         const { newRosters, storylines } = runSeasonProgression(rosters);
@@ -1965,6 +1972,7 @@ export const useGameStore = create((set, get) => ({
             weeklyNews: mergedNews,
             seasonHistory: [...(get().seasonHistory || []), historyEntry]
         });
+        get().foAfterOffseason(); // CLAUDE: poaching, retirements, declarations, options, holdouts
     },
 
     startFreeAgency: () => {
@@ -1974,8 +1982,11 @@ export const useGameStore = create((set, get) => ({
             else return;
         }
         if (get().phase !== 'offseason') return;
-        set({ phase: 'freeAgency', week: 1, cpuSigningsDone: false, scoutingPoints: 10, scoutedProspects: {}, draftWatchlist: [], pendingTradeOffer: null, draftClass: [], injuries: [] });
-        persist('gridiron_save_v3', { ...get(), phase: 'freeAgency', week: 1, cpuSigningsDone: false, scoutingPoints: 10, scoutedProspects: {}, draftWatchlist: [], pendingTradeOffer: null, draftClass: [], injuries: [] });
+        // CLAUDE: the class previewed at the combine carries into the draft.
+        const keepClass = (get().draftClass || []).some(p => String(p.id).startsWith(`college-${get().year + 1}-`) || p.draftYear === get().year + 1);
+        const reset = { phase: 'freeAgency', week: 1, cpuSigningsDone: false, scoutingPoints: 10, scoutedProspects: keepClass ? get().scoutedProspects : {}, draftWatchlist: [], pendingTradeOffer: null, draftClass: keepClass ? get().draftClass : [], injuries: [] };
+        set(reset);
+        persist('gridiron_save_v3', { ...get(), ...reset });
     },
 
     // Apply a story event choice
@@ -2162,7 +2173,7 @@ export const useGameStore = create((set, get) => ({
             collegeAlumni: [...(get().collegeAlumni || []), ...(get().collegePipeline || []).filter(p => p.draftYear === year + 1 && get().collegeWatchlist.includes(p.id))],
             collegePipeline: nextCollegeYear(get().collegePipeline || [], year + 1),
             draftArchive: [...(get().draftArchive || []), { year: year + 1, picks: get().draftHistory }],
-            draftPickOwners: Object.fromEntries(TEAMS.map(t => [t.id, [1,2,3,4,5,6,7].map(round => ({ round, originalTeamId: t.id }))])),
+            draftPickOwners: rollPicks(get().draftPickOwners, TEAMS.map(t => t.id), year + 1), // CLAUDE: future picks survive
             year: year + 1,
             season: season + 1,
             week: 1,
@@ -2187,6 +2198,8 @@ export const useGameStore = create((set, get) => ({
         });
 
         persist('gridiron_save_v3', { ...get(), year: year + 1, season: season + 1, week: 1, phase: 'regular', schedule: newSchedule, standings: newStandings, freeAgents: updatedFreeAgents, waiverWire: newWaiverWire });
+        get().foAfterDraft(); // CLAUDE: camp reveal
+        get().foEnsure(); // CLAUDE
     },
 
     updateInjuries: () => {
@@ -2243,6 +2256,7 @@ export const useGameStore = create((set, get) => ({
 
         const newState = { ...get(), rosters: newRosters, teamRatings: newRatings, waiverWire: newWaiverWire, freeAgents: phase !== 'regular' && cutP ? [{ ...cutP, teamId: null }, ...get().freeAgents] : get().freeAgents };
         set(newState);
+        if (cutP) get().foChargeCut(cutP); // CLAUDE: dead money
         persist('gridiron_save_v3', newState);
     },
 
@@ -2385,6 +2399,10 @@ export const useGameStore = create((set, get) => ({
             [fromTeamId]: calculateTeamRatings(newRosters[fromTeamId]),
         };
 
+        for (const team of [userTeamId, fromTeamId]) { // CLAUDE (M0): cap legality
+            const before = foRosterSalary(rosters[team] || []), after = foRosterSalary(newRosters[team] || []);
+            if (after > CAP_TOTAL && after > before) { set({ pendingTradeOffer: null }); return false; }
+        }
         const newState = { ...get(), rosters: newRosters, draftPickOwners: newPickOwners, teamRatings: newRatings, pendingTradeOffer: null };
         set(newState);
         persist('gridiron_save_v3', newState);
@@ -2469,14 +2487,15 @@ export const useGameStore = create((set, get) => ({
         });
     },
 
-    placeFAOffer: (faId, salary, years) => {
+    placeFAOffer: (faId, salary, years, structure = {}) => {
         const s = get(), m = s.faMarket;
         if (s.phase !== 'freeAgency' || !m || m.closed) return { ok: false, reason: 'The market is closed.' };
         const player = (s.freeAgents || []).find(p => p.id === faId);
-        const budget = offerBudget({ userRoster: s.rosters[s.userTeamId] || [], offers: m.offers, pool: s.freeAgents, exceptId: faId });
+        const budget = offerBudget({ userRoster: s.rosters[s.userTeamId] || [], offers: m.offers, pool: s.freeAgents, exceptId: faId, deadCap: deadCapNow(s) });
         const reason = validateOffer(player, { salary, years }, budget);
         if (reason) return { ok: false, reason };
-        set({ faMarket: { ...m, offers: { ...m.offers, [faId]: { salary, years } } } });
+        const { guaranteePct = 0, bonusPct = 0 } = structure || {};
+        set({ faMarket: { ...m, offers: { ...m.offers, [faId]: { salary, years, guaranteePct, bonusPct } } } });
         return { ok: true };
     },
 
@@ -2492,7 +2511,8 @@ export const useGameStore = create((set, get) => ({
         const s = get(), m = s.faMarket;
         if (s.phase !== 'freeAgency' || !m || m.closed) return null;
         const r = resolveMarketDay({ pool: s.freeAgents || [], offers: m.offers, floors: m.floors, day: m.day,
-            rosters: s.rosters, userTeamId: s.userTeamId, draftPickOwners: s.draftPickOwners, standings: s.standings });
+            rosters: s.rosters, userTeamId: s.userTeamId, draftPickOwners: s.draftPickOwners, standings: s.standings,
+            year: s.year + 1, extras: get().foFAExtras() });
         const rosters = { ...s.rosters }, teamRatings = { ...s.teamRatings }, touched = new Set();
         for (const { player, teamId, contract } of r.signings) {
             const { ask: _a, openingAsk: _o, interest: _i, ...clean } = player;
@@ -2501,7 +2521,7 @@ export const useGameStore = create((set, get) => ({
         }
         touched.forEach(id => { teamRatings[id] = calculateTeamRatings(rosters[id]); });
         const day = m.day + 1;
-        const entry = (kind, player, extra) => ({ day, kind, playerId: player.id, name: player.name, position: player.position, ovr: player.ovr, ...extra });
+        const entry = (kind, player, extra) => ({ day, kind, playerId: player.id, name: player.name, position: player.position, ovr: player.ovr, from: player.previousTeamId || null, ...extra });
         const log = [
             ...r.signings.map(sg => entry(sg.byUser ? 'user' : 'rival', sg.player, { teamId: sg.teamId, salary: sg.contract.salary, years: sg.contract.years })),
             ...r.rejections.map(rj => entry('rejected', rj.player, { text: rj.text, teamId: rj.signedWith, salary: rj.offer.salary, years: rj.offer.years })),
@@ -2535,7 +2555,7 @@ export const useGameStore = create((set, get) => ({
         const s = get();
         const player = (s.freeAgents || []).find(p => p.id === faId);
         const salary = player ? askOf(player) : 0, years = player ? preferredYears(player) : 1;
-        const budget = offerBudget({ userRoster: s.rosters[s.userTeamId] || [] });
+        const budget = offerBudget({ userRoster: s.rosters[s.userTeamId] || [], deadCap: deadCapNow(s) });
         const reason = validateOffer(player, { salary, years }, budget);
         if (reason) return { ok: false, reason };
         get().signFreeAgent(faId, s.userTeamId, { salary, years });
@@ -2561,6 +2581,7 @@ export const useGameStore = create((set, get) => ({
         set({ morale, storylineQueue: [...(s.storylineQueue || []), story] });
         return { moraleDelta, notes };
     },
+    ...frontOfficeActions(set, get), // Front-office overhaul — see store/frontOfficeSlice.js
     // ===== END CLAUDE =====
 
     // ===== CODEX ACTIONS =====

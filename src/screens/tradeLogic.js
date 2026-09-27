@@ -1,24 +1,13 @@
 // Trade valuation and CPU GM logic, lifted out of TradeCenter.jsx.
 // This is calibrated game balance — the UI rewrite must not touch it.
 
-import { TEAMS } from '../data/teams';
+import { TEAMS } from '../data/teams.js';
+import { pickNumberValue } from '../engine/assetValue.js'; // CLAUDE
 
-// ── Draft pick trade values ───────────────────────────────────────
-// Calibrated so a Round 1 pick ≈ a solid starter (OVR ~83-84 non-QB).
-// Calibrated to modern NFL trade market (OTC/Rich Hill chart reference):
-// 1st = proven game-changers, 2nd = strong starters, 3rd = quality depth.
-// R1 #1 overall ≈ elite OVR 91-92 starter; late 1st ≈ solid OVR 84 starter.
-const PICK_BASE = { 1: 1800, 2: 900, 3: 460, 4: 230, 5: 125, 6: 65, 7: 35 };
-
-// Top-10 picks command significant premium (NFL reality: #1 > 3× late 1st)
-const ROUND1_SLOPE = [2200,2100,2020,1950,1880,1820,1770,1730,1690,1650,
-                      1620,1590,1560,1540,1520,1500,1480,1460,1440,1420,
-                      1400,1380,1360,1340,1320,1300,1280,1260,1240,1210,
-                      1180,1150];
-
+// ── Draft pick trade values: one chart, in engine/assetValue.js ─────
 export function getPickValue(round, pickNum) {
-    if (round === 1 && pickNum >= 1 && pickNum <= 32) return ROUND1_SLOPE[pickNum - 1];
-    return PICK_BASE[round] || 25;
+    // CLAUDE: delegates to the single pick chart in assetValue.js.
+    return pickNumberValue((Math.max(1, round) - 1) * 32 + Math.max(1, Math.min(32, pickNum || 16)));
 }
 
 // ── NFL-calibrated player trade values ───────────────────────────
@@ -155,5 +144,5 @@ export function evaluateOffer({ offerValue, receiveValue, cpuTeamId, cpuRoster, 
     return { result: 'rejected', reason: `${TEAMS.find(t=>t.id===cpuTeamId)?.name || 'CPU'} isn't interested in this deal.` };
 }
 
-export { TRADE_DEADLINE_WEEK } from '../engine/leagueRules';
+export { TRADE_DEADLINE_WEEK } from '../engine/leagueRules.js';
 
