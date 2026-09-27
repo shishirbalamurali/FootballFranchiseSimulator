@@ -26,6 +26,9 @@ import { rosterSalary } from '../engine/cpuRosterManagement';
 import { SALARY_CAP } from '../engine/contracts';
 import { TRADE_DEADLINE_WEEK } from '../engine/leagueRules';
 import { hashSeed, seededRng } from '../engine/seededRandom';
+import { calculatePositionNeeds } from '../engine/draft';
+
+const POS_VALUE = { QB: 1.5, DL: 1.45, WR: 1.35, CB: 1.3, OL: 1.25, LB: 1.15, S: 1.1, TE: 1.05, RB: 0.95, K: 0.5, P: 0.5 };
 import { wouldStart } from '../engine/faMarket';
 import { teamFit } from '../engine/schemes';
 
@@ -502,8 +505,18 @@ export const frontOfficeActions = (set, get) => ({
         const tiers = s.scouting?.board?.tiers || {};
         const onBoard = (s.scouting?.board?.order || []).filter(id => avail.has(id) && tiers[id] !== 'dnd');
         if (onBoard.length) return onBoard[0];
-        const best = [...(s.draftClass || [])].map(p => ({ p, g: userView(p, s.scouting, s.userTeamId).grade })).sort((a, b) => b.g - a.g)[0];
-        return best?.p.id || null;
+        // No board left: the war room drafts like a sensible GM — your grades,
+        // positional value, needs and scarcity (the CPU's own logic).
+        const roster = s.rosters[s.userTeamId] || [];
+        const needs = calculatePositionNeeds(roster);
+        const qb = roster.filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr)[0];
+        const round = s.draftOrder?.[s.currentPickIndex]?.round || 1;
+        const scored = (s.draftClass || []).filter(p => round >= 5 || !['K', 'P'].includes(p.position)).map(p => {
+            const g = userView(p, s.scouting, s.userTeamId).grade;
+            const value = (POS_VALUE[p.position] || 1) * (p.position === 'QB' && qb?.ovr >= 72 ? 0.6 : 1);
+            return { id: p.id, score: g * value + (needs[p.position] || 50) * 0.35 };
+        }).sort((a, b) => b.score - a.score);
+        return scored[0]?.id || (s.draftClass || [])[0]?.id || null;
     },
     foUserPick: (prospectId) => {
         const s = get();

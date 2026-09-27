@@ -14,6 +14,11 @@ import {
 } from '../components/ui';
 import PlayerFace from '../components/PlayerFace';
 import { PlayerNameLine, ReputationBadges } from '../components/PlayerIdentity';
+import { faPreferences } from '../engine/character'; // CLAUDE: visits reveal priorities
+import { agentFor } from '../engine/people';
+import { PITCHES, deadCapNow } from '../store/frontOfficeSlice';
+import { StageStepper } from '../components/frontOffice/FOBits';
+import { openPlayerCard } from '../components/player/cardStore';
 
 // Free agency is a four-day market. Offers go out, then the day resolves all
 // at once: players weigh your offer against rival suitors, rival clubs sign
@@ -70,12 +75,14 @@ function DayStepper({ day, closed }) {
 }
 
 // ── Offer builder (remounted per player via key) ─────────────────────────────
-function OfferBuilder({ fa, existing, floor, suitorCount, budget, userTeamId, userRoster, standings, onPlace, onWithdraw }) {
+function OfferBuilder({ fa, existing, floor, suitorCount, budget, userTeamId, userRoster, standings, onPlace, onWithdraw, extra }) {
   const ask = askOf(fa);
   const pref = preferredYears(fa);
   const [salary, setSalary] = useState(existing?.salary ?? Math.max(ask, Math.ceil(floor || 0)));
   const [years, setYears] = useState(existing?.years ?? pref);
-  const read = assessOffer(fa, { salary, years }, { userTeamId, userRoster, standings, suitorCount, floor });
+  const [guaranteePct, setGuarantee] = useState(existing?.guaranteePct ?? 0.25);
+  const [bonusPct, setBonus] = useState(existing?.bonusPct ?? 0);
+  const read = assessOffer(fa, { salary, years, guaranteePct, bonusPct }, { userTeamId, userRoster, standings, suitorCount, floor, extra });
   const maxSalary = Math.max(5, Math.round(ask * 2), Math.ceil((floor || 0) * 1.5));
   const overBudget = salary > budget.space;
   const noSpot = !existing && budget.openSpots <= 0;
@@ -113,6 +120,18 @@ function OfferBuilder({ fa, existing, floor, suitorCount, budget, userTeamId, us
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1 text-label text-fg-secondary">
+          Guaranteed {Math.round(guaranteePct * 100)}% ({money(salary * years * guaranteePct)})
+          <input type="range" min={0} max={100} step={5} value={Math.round(guaranteePct * 100)} onChange={e => setGuarantee(Number(e.target.value) / 100)} className="w-full accent-[var(--team-primary)]" aria-label="Guaranteed money" />
+        </label>
+        <label className="flex flex-col gap-1 text-label text-fg-secondary">
+          Signing bonus {Math.round(bonusPct * 100)}% ({money(salary * years * bonusPct)})
+          <input type="range" min={0} max={60} step={5} value={Math.round(bonusPct * 100)} onChange={e => setBonus(Number(e.target.value) / 100)} className="w-full accent-[var(--team-primary)]" aria-label="Signing bonus" />
+        </label>
+        <p className="col-span-2 text-micro text-fg-faint">Guarantees and bonus don't change the cap hit, but they become dead money if you cut him.</p>
+      </div>
+
       <div>
         <Meter
           label="Chance he signs with you"
@@ -133,11 +152,47 @@ function OfferBuilder({ fa, existing, floor, suitorCount, budget, userTeamId, us
         <Button
           variant="primary"
           disabled={overBudget || noSpot || read.chance === 0}
-          onClick={() => onPlace(salary, years)}
+          onClick={() => onPlace(salary, years, { guaranteePct, bonusPct })}
         >
           {existing ? 'Update offer' : 'Place offer'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── Visit & pitch (opening day only) ─────────────────────────────────────────
+function VisitPitch({ fa, day }) {
+  const visits = useGameStore(s => s.frontOffice?.faVisits);
+  const year = useGameStore(s => s.year);
+  const visit = useGameStore(s => s.foFAVisit);
+  const setPitch = useGameStore(s => s.foSetPitch);
+  const toast = useToast();
+  const v = visits?.year === year ? visits : { ids: [], pitch: {} };
+  const hosted = v.ids.includes(fa.id);
+  const pitch = v.pitch?.[fa.id] || [];
+  const agent = agentFor(fa.id);
+  const prefs = faPreferences(fa);
+  return (
+    <div className="rounded-card border-2 border-line bg-surface-sunken p-3">
+      <p className="text-micro uppercase text-fg-faint">Agent · {agent.name}, {agent.agency} · {agent.style.label}</p>
+      {!hosted ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="flex-1 text-label text-fg-secondary">{day > 0 ? 'Visits happen on opening day.' : `Host him on a visit (${3 - v.ids.length} left) to learn what he wants and pitch your club.`}</p>
+          <Button size="sm" disabled={day > 0 || v.ids.length >= 3} onClick={() => { const r = visit(fa.id); if (!r.ok) toast.error({ title: 'No visit', body: r.reason }); }}>Host visit</Button>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <p className="text-label"><strong>What he wants:</strong> {prefs.notes.length ? prefs.notes.join(', ') : 'a fair deal, nothing unusual'}.</p>
+          <p className="text-label text-fg-secondary">Pick two selling points. True ones help; ones that don't hold up backfire.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.values(PITCHES).map(pt => {
+              const on = pitch.includes(pt.id);
+              return <Button key={pt.id} size="sm" variant={on ? 'primary' : 'secondary'} title={pt.blurb} disabled={!on && pitch.length >= 2} onClick={() => setPitch(fa.id, on ? pitch.filter(x => x !== pt.id) : [...pitch, pt.id])}>{pt.label}</Button>;
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -157,7 +212,7 @@ function PlayerPanel({ fa, children, watched, onWatch }) {
             <span className="text-label text-fg-muted">Age {fa.age}</span>
             {fa.isUndrafted && <Badge tone="info">Undrafted rookie</Badge>}
           </div>
-          <p className="truncate font-display text-h1 uppercase text-fg">{fa.name}</p>
+          <button type="button" onClick={() => openPlayerCard(fa, 'FA', { kind: 'fa', ask: askOf(fa) })} className="block max-w-full truncate text-left font-display text-h1 uppercase text-fg hover:underline">{fa.name}</button>
           <p className="truncate text-label text-fg-muted">{fa.archetype || fa.note}</p>
           <ReputationBadges player={fa} className="mt-2" />
         </div>
@@ -257,7 +312,10 @@ export default function FreeAgency({ onNavigate }) {
   const faWatchlist = useMemo(() => faWatchlistRaw || [], [faWatchlistRaw]);
   const userRoster = useMemo(() => rosters[userTeamId] || [], [rosters, userTeamId]);
   const pool = useMemo(() => freeAgents || [], [freeAgents]);
-  const budget = useMemo(() => offerBudget({ userRoster, offers, pool }), [userRoster, offers, pool]);
+  const deadCap = useGameStore(s => deadCapNow(s));
+  const extras = useGameStore(s => s.frontOffice?.faVisits);
+  const extraFor = useMemo(() => (extras ? useGameStore.getState().foFAExtras() : {}), [extras]);
+  const budget = useMemo(() => offerBudget({ userRoster, offers, pool, deadCap }), [userRoster, offers, pool, deadCap]);
   const rookieCost = isMarket ? rookieReserve(draftPickOwners?.[userTeamId] || []) : 0;
 
   const suitors = useMemo(
@@ -286,8 +344,8 @@ export default function FreeAgency({ onNavigate }) {
 
   const selected = list.find(fa => fa.id === selectedId) ?? list[0] ?? null;
 
-  const place = (fa, salary, years) => {
-    const r = placeFAOffer(fa.id, salary, years);
+  const place = (fa, salary, years, structure) => {
+    const r = placeFAOffer(fa.id, salary, years, structure);
     if (r.ok) toast.success({ title: `Offer out to ${fa.name}`, body: `${money(salary)} × ${years} yrs. He answers when the day ends.` });
     else toast.error({ title: 'Offer not placed', body: r.reason });
   };
@@ -370,9 +428,22 @@ export default function FreeAgency({ onNavigate }) {
       />
 
       <div className="mx-auto flex max-w-content flex-col gap-4 px-6 py-6">
+        {isMarket && <StageStepper onNavigate={onNavigate} />}
         {isMarket && market && (
           <div className="flex flex-wrap items-center gap-3">
             <DayStepper day={market.day} closed={market.closed} />
+          </div>
+        )}
+        {isMarket && liveMarket && (
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Position market heat">
+            <span className="text-micro uppercase text-fg-faint">Market heat</span>
+            {POSITIONS.slice(1).map(pos => {
+              // Distinct rival clubs shopping the position vs quality players left.
+              const supply = pool.filter(fa => fa.position === pos && fa.ovr >= 72).length;
+              const demand = new Set(pool.filter(fa => fa.position === pos).flatMap(fa => suitors[fa.id] || [])).size;
+              const ratio = supply ? demand / supply : demand ? 9 : 0;
+              return <Badge key={pos} tone={ratio >= 3 ? 'negative' : ratio >= 1.2 ? 'warning' : supply ? 'positive' : 'neutral'} title={`${supply} quality players, ${demand} clubs shopping`}>{pos} {ratio >= 3 ? '🔥' : ratio >= 1.2 ? '♨️' : supply ? '❄️' : '—'}</Badge>;
+            })}
           </div>
         )}
         {isMarket && rookieCost > 0 && capSpace - rookieCost < 0 && (
@@ -468,6 +539,7 @@ export default function FreeAgency({ onNavigate }) {
           <div className="flex flex-col gap-4 lg:col-span-5">
             {selected ? (
               <PlayerPanel fa={selected} watched={faWatchlist.includes(selected.id)} onWatch={() => toggleFAWatchlist(selected.id)}>
+                {liveMarket && <VisitPitch fa={selected} day={liveMarket.day} />}
                 {liveMarket ? (
                   <OfferBuilder
                     key={`${selected.id}-${liveMarket.day}`}
@@ -475,11 +547,12 @@ export default function FreeAgency({ onNavigate }) {
                     existing={offers[selected.id]}
                     floor={floors[selected.id]}
                     suitorCount={suitors[selected.id]?.length || 0}
-                    budget={offerBudget({ userRoster, offers, pool, exceptId: selected.id })}
+                    budget={offerBudget({ userRoster, offers, pool, exceptId: selected.id, deadCap })}
+                    extra={extraFor[selected.id]}
                     userTeamId={userTeamId}
                     userRoster={userRoster}
                     standings={standings}
-                    onPlace={(salary, years) => place(selected, salary, years)}
+                    onPlace={(salary, years, structure) => place(selected, salary, years, structure)}
                     onWithdraw={() => withdrawFAOffer(selected.id)}
                   />
                 ) : isMarket ? (

@@ -1,4 +1,5 @@
 import { useGameStore } from '../store/gameStore';
+import { XFactorMatchup } from './frontOffice/XFactorMatchup'; // CLAUDE
 import { TEAMS } from '../data/teams';
 import WeeklyPreparation from './WeeklyPreparation';
 import {
@@ -127,6 +128,8 @@ export default function MatchupPreview({
             injuries={injuries.filter(i => i.teamId === oppTeamId)}
           />
         </div>
+
+        <XFactorMatchup userTeamId={userTeamId} oppTeamId={oppTeamId} />
 
         <div>
           <div className="mb-2 flex items-baseline justify-between">

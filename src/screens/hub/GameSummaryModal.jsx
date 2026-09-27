@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { XFactorMoments } from '../../components/frontOffice/XFactorMatchup'; // CLAUDE
 import { TEAMS } from '../../data/teams';
 import { getTopPerformers } from './hubData';
 import { WeeklyGameReview } from '../../components/WeeklyPreparation';
@@ -234,6 +235,8 @@ function GameSummaryModal({ game, userTeamId, teamData, rosters, objectives, com
             }}
           />
         )}
+
+        <XFactorMoments game={game} />
 
         <WeeklyGameReview review={game.weeklyReview} userTeamId={userTeamId} />
 

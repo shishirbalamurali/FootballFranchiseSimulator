@@ -4,7 +4,8 @@
 import { useMemo, useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { TEAMS } from '../../data/teams';
-import { userView, consensus, knowledgeOf, scoutOpinions, roundLabel, medicalOf, measurables, percentile, sleepers, proComp, scoutOf, ASSIGNMENTS, INTERVIEW_SLOTS, VISIT_SLOTS, projectedRound } from '../../engine/scouting';
+import { projectClass } from '../../engine/projection';
+import { userView, knowledgeOf, scoutOpinions, roundLabel, medicalOf, measurables, percentile, sleepers, proComp, scoutOf, ASSIGNMENTS, INTERVIEW_SLOTS, VISIT_SLOTS, projectedRound } from '../../engine/scouting';
 import { REGIONS, biasInfo, SCOUT_ROLES } from '../../engine/people';
 import { eventText, storyLabel, classForecast, regionOfSchool } from '../../engine/collegeSeason';
 import { calculatePositionNeeds } from '../../engine/draft';
@@ -119,8 +120,8 @@ function BoardTab({ prospects, real }) {
     const [q, setQ] = useState('');
     const [limit, setLimit] = useState(80);
     const [open, setOpen] = useState(null);
-    const ids = useMemo(() => TEAMS.map(t => t.id).filter(id => id !== s.userTeamId), [s.userTeamId]);
-    const cons = useMemo(() => consensus(prospects, ids), [prospects, ids]);
+    // The league's mock draft (deterministic): where each prospect is projected to go.
+    const cons = useMemo(() => projectClass(useGameStore.getState(), prospects), [prospects]);
     const needs = useMemo(() => calculatePositionNeeds(s.rosters[s.userTeamId] || []), [s.rosters, s.userTeamId]);
     // Rank positions by need: the top three show as ●●● / ●●○ / ●○○.
     const needRank = useMemo(() => Object.fromEntries(Object.entries(needs).sort((a, b) => b[1] - a[1]).map(([pos], i) => [pos, i])), [needs]);
@@ -275,6 +276,41 @@ function CombineTab({ prospects }) {
     );
 }
 
+/** Past drafts, re-graded once the players have had three seasons. */
+function HistoryTab() {
+    const s = useGameStore();
+    const all = useMemo(() => new Map(Object.entries(s.rosters).flatMap(([t, r]) => r.map(p => [p.id, { p, t }]))), [s.rosters]);
+    const classes = (s.draftArchive || []).slice().reverse();
+    if (!classes.length) return <EmptyState icon="📜" title="No draft history yet" body="Your first class is graded by the media on draft night, and for real three seasons later." />;
+    const expected = n => Math.max(58, Math.round(82 - Math.log2(n) * 3.2));
+    const letter = d => (d >= 6 ? 'A' : d >= 3 ? 'B+' : d >= 0 ? 'B' : d >= -3 ? 'C' : 'D');
+    return (
+        <div className="space-y-4">
+            {classes.map(c => {
+                const mine = (c.picks || []).filter(h => h.teamId === s.userTeamId);
+                const ready = s.year - c.year >= 3;
+                const rows = mine.map(h => { const now = all.get(h.player.id); return { h, now, diff: now ? now.p.ovr - expected(h.pickNumber) : null }; });
+                const avg = rows.filter(r => r.diff != null).reduce((n, r) => n + r.diff, 0) / Math.max(1, rows.filter(r => r.diff != null).length);
+                return (
+                    <Card key={c.year}>
+                        <CardHeader eyebrow={`${c.year} draft`} title={ready ? `Re-grade: ${letter(avg)}` : `Re-grade in ${3 - (s.year - c.year)} season${3 - (s.year - c.year) === 1 ? '' : 's'}`} />
+                        <CardBody className="grid gap-1 md:grid-cols-2">
+                            {rows.map(({ h, now, diff }) => (
+                                <p key={h.pickNumber} className="flex items-center gap-2 text-label">
+                                    <span className="w-12 font-bold tabular-nums">#{h.pickNumber}</span><PositionTag position={h.player.position} /><span className="min-w-0 flex-1 truncate">{h.player.name}</span>
+                                    <span className="tabular-nums text-fg-muted">{h.player.ovr} → {now ? now.p.ovr : '—'}</span>
+                                    {ready && diff != null && <Badge tone={diff >= 3 ? 'positive' : diff <= -3 ? 'negative' : 'neutral'}>{diff > 0 ? '+' : ''}{diff} vs slot</Badge>}
+                                    {!now && <Badge>Out of the league</Badge>}
+                                </p>
+                            ))}
+                        </CardBody>
+                    </Card>
+                );
+            })}
+        </div>
+    );
+}
+
 export default function BigBoard({ onNavigate }) {
     const s = useGameStore();
     const [tab, setTab] = useState('board');
@@ -283,10 +319,11 @@ export default function BigBoard({ onNavigate }) {
         <FOShell title="Big Board" eyebrow={`${s.year + 1} draft class · ${list.length} prospects`} wide
             actions={<Button variant="primary" onClick={() => s.foSetBoard(list.map(p => ({ p, g: userView(p, s.scouting, s.userTeamId).grade })).sort((a, b) => b.g - a.g).slice(0, 60).map(x => x.p.id))}>Auto-rank top 60</Button>}>
             <StageStepper onNavigate={onNavigate} />
-            <Tabs value={tab} onChange={setTab} label="Big board sections" items={[{ id: 'board', label: 'Board' }, { id: 'office', label: 'Scouting office' }, { id: 'combine', label: 'Combine' }]} />
+            <Tabs value={tab} onChange={setTab} label="Big board sections" items={[{ id: 'board', label: 'Board' }, { id: 'office', label: 'Scouting office' }, { id: 'combine', label: 'Combine' }, { id: 'history', label: 'Draft history' }]} />
             {tab === 'board' && <BoardTab prospects={list} real={real} />}
             {tab === 'office' && <OfficeTab prospects={list} />}
             {tab === 'combine' && <CombineTab prospects={list} />}
+            {tab === 'history' && <HistoryTab />}
         </FOShell>
     );
 }
