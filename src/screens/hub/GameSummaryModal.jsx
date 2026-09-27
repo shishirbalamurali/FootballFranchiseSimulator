@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { TEAMS } from '../../data/teams';
 import { getTopPerformers } from './hubData';
 import { WeeklyGameReview } from '../../components/WeeklyPreparation';
-import { readPbp, describePlay, classifyGame, periodLabel, clockText, creditSide } from '../../engine/gameStory';
+import { readPbp, describePlay, classifyGame, periodLabel, clockText, creditSide, winProbSeries, playOfTheGame } from '../../engine/gameStory';
 import {
   Modal, Button, Badge, TeamCrest, PositionTag, Stat, cx, scoreToGrade,
 } from '../../components/ui';
@@ -76,23 +76,25 @@ function gradePlayer(player, stats, isWin) {
     return scoreToGrade(score);
 }
 
-const STORY_TONE = { drama: 'warning', fire: 'negative', ice: 'info', rout: 'neutral', plain: 'neutral' };
+const STORY_TONE = { drama: 'warning', fire: 'negative', ice: 'info', rout: 'neutral', upset: 'negative', plain: 'neutral' };
 const PLAY_RANK = { score: 3, turnover: 3, defense: 2, big: 2, plain: 0 };
 
 /** Line score by quarter, story tags, and the plays that decided it. */
 function GameStory({ game, teams }) {
   const story = useMemo(() => classifyGame(game), [game]);
-  const keyPlays = useMemo(() => {
+  const { keyPlays, potg } = useMemo(() => {
     const abbr = [teams.home?.abbreviation ?? 'HOME', teams.away?.abbreviation ?? 'AWAY'];
     const plays = readPbp(game.pbp);
+    // The play that swung the win probability most, from the stored spread.
+    const best = plays.length ? playOfTheGame(plays, winProbSeries(plays, game.pbp?.ctx?.spread ?? 0, (game.homeScore ?? 0) - (game.awayScore ?? 0))) : null;
     const picked = plays
       .map(p => ({ p, d: describePlay(p, abbr) }))
-      .filter(({ d }) => d.key && (PLAY_RANK[d.tone] ?? 0) >= 2 && d.tag !== 'PASS BREAKUP');
+      .filter(({ p, d }) => (d.key && (PLAY_RANK[d.tone] ?? 0) >= 2 && d.tag !== 'PASS BREAKUP') || p.idx === best?.idx);
     // Every score and turnover, then the biggest defensive and chunk plays, in game order
-    const must = picked.filter(x => PLAY_RANK[x.d.tone] === 3);
-    const rest = picked.filter(x => PLAY_RANK[x.d.tone] === 2).slice(0, Math.max(0, 10 - must.length));
-    return [...must, ...rest].sort((a, b) => a.p.idx - b.p.idx).slice(0, 12);
-  }, [game.pbp, teams]);
+    const must = picked.filter(x => PLAY_RANK[x.d.tone] === 3 || x.p.idx === best?.idx);
+    const rest = picked.filter(x => PLAY_RANK[x.d.tone] === 2 && x.p.idx !== best?.idx).slice(0, Math.max(0, 10 - must.length));
+    return { keyPlays: [...must, ...rest].sort((a, b) => a.p.idx - b.p.idx).slice(0, 12), potg: best };
+  }, [game.pbp, game.homeScore, game.awayScore, teams]);
   const q = game.quarters;
   const cols = q ? q[0].map((_, i) => (i < 4 ? `Q${i + 1}` : 'OT')) : [];
   const rowFor = (team, side) => (
@@ -125,11 +127,15 @@ function GameStory({ game, teams }) {
         <ol className="flex flex-col">
           {keyPlays.map(({ p, d }) => {
             const team = creditSide(p, d) === 0 ? teams.home : teams.away;
+            const isPotg = p.idx === potg?.idx;
             return (
-              <li key={p.idx} className="flex gap-2.5 border-b border-line-subtle py-1.5 last:border-0">
+              <li key={p.idx} className={cx('flex gap-2.5 border-b border-line-subtle py-1.5 last:border-0', isPotg && 'rounded-card bg-warning-bg px-1.5')}>
                 <span className="w-1 shrink-0 rounded-full" style={{ background: team?.theme?.primary }} />
                 <span className="w-16 shrink-0 text-micro tabular-nums text-fg-faint">{periodLabel(p.q)} {clockText(p.clock)}</span>
                 <span className="min-w-0 flex-1 text-label text-fg-secondary">
+                  {isPotg && <b className="mr-1.5 text-micro uppercase text-warning-fg">⭐ Play of the game</b>}
+                  {d.clutch && <span className="mr-1 text-micro" title="Clutch">🧊</span>}
+                  {d.witching && !d.clutch && <span className="mr-1 text-micro" title="Witching Hour">🌙</span>}
                   <b className="mr-1.5 text-micro uppercase text-fg">{d.tag}</b>{d.text}
                 </span>
                 <span className="shrink-0 text-micro tabular-nums text-fg-faint">{p.as}–{p.hs}</span>
