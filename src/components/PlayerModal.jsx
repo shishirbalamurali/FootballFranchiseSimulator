@@ -1,207 +1,392 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { TEAMS } from '../data/teams';
+import { useGameStore } from '../store/gameStore';
+import { characterFor, personalityView, moodFor, teamContext, contractStance } from '../engine/character';
+import PlayerFace from './PlayerFace';
+import {
+  Modal, Tabs, Button, Badge, TeamCrest, PositionTag, RarityChip,
+  Stat, StatRow, EmptyState, getRarity, cx,
+} from './ui';
 
-export default function PlayerModal({ player, teamId, teamColors, onClose }) {
-    const [activeTab, setActiveTab] = useState('attributes'); // attributes, stats
+const TONE_BADGE = { good: 'positive', bad: 'negative', mixed: 'warning' };
+const TONE_BORDER = { good: 'border-positive-border', bad: 'border-negative-border', mixed: 'border-warning-border' };
 
-    if (!player) return null;
+const prettify = (k) => k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim();
 
-    const { universal, position: positionSpecific } = player.attributes;
-    const primaryColor = teamColors?.primary || '#3b82f6';
+function AttributeBar({ label, value, color, editable, onCommit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
 
-    // Use passed teamId or fall back to player.teamId or 'FA'
-    const displayTeamId = teamId || player.teamId || 'FA';
+  const commit = () => {
+    const n = Math.max(0, Math.min(99, Number(draft)));
+    if (!Number.isNaN(n) && n !== value) onCommit(n);
+    setEditing(false);
+  };
 
-    // Attribute Groups
-    const attributeGroups = {
-        'Physical': {
-            'SPD': universal.speed,
-            'ACC': universal.acceleration,
-            'STR': universal.strength,
-            'AGI': universal.agility,
-        },
-        'Specific': positionSpecific
-    };
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-32 shrink-0 truncate text-label text-fg-muted">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
+        <div className="h-full rounded-full transition-[width] duration-base"
+             style={{ width: `${value}%`, backgroundColor: color }} />
+      </div>
+      {editing ? (
+        <input
+          autoFocus
+          type="number"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(value); setEditing(false); }
+          }}
+          aria-label={`${label} rating`}
+          className="w-12 rounded-chip border border-team bg-surface-sunken px-1 py-0.5 text-right text-label tabular-nums text-fg"
+        />
+      ) : (
+        <button
+          type="button"
+          disabled={!editable}
+          onClick={() => { setDraft(value); setEditing(true); }}
+          className={cx(
+            'w-12 shrink-0 rounded-chip px-1 py-0.5 text-right text-label tabular-nums text-fg-secondary',
+            editable && 'hover:bg-surface-hover hover:text-fg',
+          )}
+          title={editable ? `Edit ${label}` : undefined}
+        >
+          {value}
+        </button>
+      )}
+    </div>
+  );
+}
 
-    // Calculate details
-    const ovrChange = player.ovrHistory && player.ovrHistory.length > 1
-        ? player.ovr - player.ovrHistory[player.ovrHistory.length - 2]
-        : 0;
+function AxisBar({ label, low, high, value }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-label font-semibold text-fg">{label}</span>
+        <span className="text-label tabular-nums text-fg-muted">{value}</span>
+      </div>
+      <div className="relative h-2 rounded-full bg-surface-sunken">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-team transition-[width] duration-slow"
+             style={{ width: `${value}%` }} />
+        <span className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-ink bg-surface-raised"
+              style={{ left: `${value}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-micro uppercase text-fg-faint">
+        <span>{low}</span><span>{high}</span>
+      </div>
+    </div>
+  );
+}
 
-    return (
-        <AnimatePresence>
-            <motion.div
-                className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-            >
-                <motion.div
-                    className="bg-paper w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border-4 border-ink shadow-2xl relative"
-                    onClick={e => e.stopPropagation()}
-                    initial={{ scale: 0.9, y: 20 }}
-                    animate={{ scale: 1, y: 0 }}
-                    transition={{ type: 'spring', damping: 20 }}
-                >
-                    {/* Header */}
-                    <div className="p-6 border-b-4 border-ink bg-white relative overflow-hidden">
-                        {/* Pattern Background */}
-                        <div className="absolute inset-0 opacity-10"
-                            style={{ backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)', backgroundSize: '10px 10px' }}
-                        />
+function MoodSection({ mood, stance }) {
+  return (
+    <section>
+      <h3 className="mb-2.5 text-micro uppercase text-fg-faint">Mood</h3>
+      <div className="rounded-card bg-surface-sunken px-4 py-3">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-h2 leading-none" aria-hidden="true">{mood.icon}</span>
+          <span className="font-display text-h3 uppercase text-fg">{mood.label}</span>
+          <span className="ml-auto text-label tabular-nums text-fg-muted">{mood.score}/100</span>
+        </div>
+        {mood.reasons.length ? (
+          <ul className="flex flex-col gap-1">
+            {mood.reasons.map(r => (
+              <li key={r.text} className="flex items-center gap-2 text-label">
+                <span className={cx('w-9 shrink-0 text-right font-semibold tabular-nums', r.delta > 0 ? 'text-positive-fg' : 'text-negative-fg')}>
+                  {r.delta > 0 ? '+' : ''}{r.delta}
+                </span>
+                <span className="text-fg-secondary">{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-label text-fg-muted">Nothing on his mind right now.</p>
+        )}
+        {stance && (
+          <p className={cx('mt-3 border-t border-line-subtle pt-2.5 text-label', stance.willing ? 'text-fg-secondary' : 'text-negative-fg')}>
+            {stance.willing
+              ? <>Extension ask: <strong className="tabular-nums text-fg">${stance.ask}M</strong>/yr{stance.notes.length ? ` · ${stance.notes.join(' · ')}` : ''}</>
+              : stance.refusal}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
 
-                        <div className="relative z-10 flex justify-between items-start">
-                            <div className="flex-1 pr-6">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-black uppercase tracking-widest text-sm" style={{ color: primaryColor }}>
-                                        {TEAMS.find(t => t.id === displayTeamId)?.location} {TEAMS.find(t => t.id === displayTeamId)?.name || 'Free Agent'}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="contrast-tag text-lg">{player.position}</span>
-                                    <span className="text-gray-500 font-bold uppercase tracking-wider">{player.archetype}</span>
-                                </div>
-                                <h2 className="text-4xl font-black text-ink mb-1">{player.name}</h2>
-                                <div className="text-sm font-bold text-gray-500">
-                                    Age: {player.age} • Exp: {player.experience} • Dev: {player.devTrait}
-                                </div>
-                            </div>
+function CharacterTab({ player, view, character, mood, stance }) {
+  return (
+    <div className="flex flex-col gap-5">
+      {mood && <MoodSection mood={mood} stance={stance} />}
+      <section>
+        <h3 className="mb-2.5 text-micro uppercase text-fg-faint">Personality traits</h3>
+        {view.traits.length === 0 && view.hiddenTraits === 0 ? (
+          <p className="rounded-card bg-surface-sunken px-4 py-3 text-label text-fg-muted">
+            Even-keeled. No strong personality traits — he won't make headlines, good or bad.
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {view.traits.map(t => (
+              <div key={t.id} className={cx('flex gap-3 rounded-card border-2 bg-surface-raised px-3.5 py-3', TONE_BORDER[t.tone])}>
+                <span className="text-h2 leading-none" aria-hidden="true">{t.icon}</span>
+                <div className="min-w-0">
+                  <p className="font-display text-h3 uppercase leading-tight text-fg">{t.label}</p>
+                  <p className="text-label text-fg-muted">{t.effect}</p>
+                </div>
+              </div>
+            ))}
+            {view.hiddenTraits > 0 && (
+              <div className="flex items-center gap-3 rounded-card border-2 border-dashed border-line px-3.5 py-3">
+                <span className="text-h2 leading-none" aria-hidden="true">🔒</span>
+                <p className="text-label text-fg-muted">
+                  {view.hiddenTraits === 1 ? 'A trait' : `${view.hiddenTraits} traits`} not yet known. Scout him to find out.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
-                            {/* OVR Metric */}
-                            <div className="relative flex-shrink-0">
-                                <svg width="100" height="100" viewBox="0 0 100 100">
-                                    {/* Background Ring */}
-                                    <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-                                    {/* Progress Ring */}
-                                    <circle
-                                        cx="50" cy="50" r="45"
-                                        fill="none"
-                                        stroke={primaryColor}
-                                        strokeWidth="8"
-                                        strokeDasharray={`${2 * Math.PI * 45}`}
-                                        strokeDashoffset={`${2 * Math.PI * 45 * (1 - player.ovr / 100)}`}
-                                        strokeLinecap="round"
-                                        transform="rotate(-90 50 50)"
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-4xl font-black text-ink leading-none">{player.ovr}</span>
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mt-1">OVR</span>
-                                </div>
+      <section>
+        <h3 className="mb-2.5 text-micro uppercase text-fg-faint">Makeup</h3>
+        {view.axes ? (
+          <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
+            {view.axes.map(a => <AxisBar key={a.id} {...a} />)}
+          </div>
+        ) : (
+          <EmptyState size="sm" icon="🔍" title="Personality unknown"
+                      body="Only his public reputation is known. You see your own players' full makeup; scouting reveals everyone else's." />
+        )}
+      </section>
 
-                                {ovrChange !== 0 && (
-                                    <div className={`absolute -right-4 top-0 text-sm font-bold ${ovrChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {ovrChange > 0 ? '+' : ''}{ovrChange}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+      <section>
+        <h3 className="mb-2.5 text-micro uppercase text-fg-faint">Bio</h3>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+          {[
+            ['Hometown', character.hometown],
+            ['College', character.college],
+            ['Build', `${character.height} · ${character.weightLb} lb`],
+            ['Experience', player.experience ? `${player.experience} yr${player.experience === 1 ? '' : 's'}` : 'Rookie'],
+            ['Throws', player.handedness ?? 'Right'],
+            ['Rating path', (player.ovrHistory || [player.ovr]).slice(-5).join(' → ')],
+          ].map(([k, v]) => (
+            <div key={k} className="min-w-0">
+              <dt className="text-micro uppercase text-fg-faint">{k}</dt>
+              <dd className="truncate text-label text-fg">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
+  );
+}
 
-                    {/* Tabs */}
-                    <div className="flex border-b-4 border-ink bg-gray-100">
-                        <button
-                            className={`flex-1 py-3 font-bold uppercase tracking-widest ${activeTab === 'attributes' ? 'bg-paper text-ink border-b-4 border-transparent -mb-1' : 'text-gray-500 hover:bg-gray-200'}`}
-                            style={activeTab === 'attributes' ? { borderBottomColor: primaryColor } : {}}
-                            onClick={() => setActiveTab('attributes')}
-                        >
-                            Attributes
-                        </button>
-                        <button
-                            className={`flex-1 py-3 font-bold uppercase tracking-widest ${activeTab === 'stats' ? 'bg-paper text-ink border-b-4 border-transparent -mb-1' : 'text-gray-500 hover:bg-gray-200'}`}
-                            style={activeTab === 'stats' ? { borderBottomColor: primaryColor } : {}}
-                            onClick={() => setActiveTab('stats')}
-                        >
-                            Career Stats
-                        </button>
-                    </div>
+export default function PlayerModal({ player, teamId, onClose }) {
+  const [activeTab, setActiveTab] = useState('character');
+  const [editMode, setEditMode] = useState(false);
 
-                    {/* Content */}
-                    <div className="p-6">
-                        {activeTab === 'attributes' ? (
-                            <div className="space-y-6">
-                                {Object.entries(attributeGroups).map(([groupName, attrs]) => (
-                                    <div key={groupName}>
-                                        <h3 className="text-xl font-bold text-ink mb-3 uppercase border-b-2 border-ink inline-block">{groupName}</h3>
-                                        <div className="space-y-3">
-                                            {Object.entries(attrs).map(([key, value]) => (
-                                                <div key={key} className="flex items-center gap-4">
-                                                    <span className="w-24 font-bold text-gray-600 uppercase text-sm">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                    <div className="flex-1 h-4 bg-gray-200 rounded-full border border-ink overflow-hidden">
-                                                        <motion.div
-                                                            className="h-full"
-                                                            style={{ backgroundColor: primaryColor }}
-                                                            initial={{ width: 0 }}
-                                                            animate={{ width: `${value}%` }}
-                                                            transition={{ duration: 0.5, ease: "easeOut" }}
-                                                        />
-                                                    </div>
-                                                    <span className="w-8 text-right font-black text-ink">{value}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-left">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b-2 border-ink bg-gray-100">
-                                            <th className="p-2 font-black uppercase text-gray-600">Year</th>
-                                            <th className="p-2 font-black uppercase text-gray-600">Team</th>
-                                            <th className="p-2 font-black uppercase text-gray-600 text-right">Stats</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {/* Current Season */}
-                                        <tr className="border-b border-gray-300">
-                                            <td className="p-2 font-bold">2024</td>
-                                            <td className="p-2 font-bold">{displayTeamId}</td>
-                                            <td className="p-2 text-right">
-                                                {player.stats?.season && Object.keys(player.stats.season).length > 0 ? (
-                                                    <div className="grid grid-cols-3 gap-x-4 gap-y-1 justify-end">
-                                                        {Object.entries(player.stats.season).map(([k, v]) => (
-                                                            <div key={k} className="flex justify-between gap-2">
-                                                                <span className="text-gray-500 uppercase text-xs self-center">{k.substring(0, 4)}</span>
-                                                                <span className="font-bold">{v}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400 italic">No stats</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                        {/* Career History (Previous years would go here) */}
-                                        {player.stats?.career && Object.keys(player.stats.career).length > 0 && (
-                                            <tr className="bg-gray-50 font-bold border-t-2 border-ink">
-                                                <td className="p-2">Career</td>
-                                                <td className="p-2">-</td>
-                                                <td className="p-2 text-right">
-                                                    {Object.entries(player.stats.career).map(([k, v]) => `${k}: ${v}`).join(', ')}
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
+  const setPlayerOvr = useGameStore(s => s.setPlayerOvr);
+  const setPlayerAttr = useGameStore(s => s.setPlayerAttr);
+  const userTeamId = useGameStore(s => s.userTeamId);
+  const rosters = useGameStore(s => s.rosters);
+  const standings = useGameStore(s => s.standings);
 
-                    <button
-                        className="absolute -top-4 -right-4 w-10 h-10 bg-ink text-white rounded-full font-bold flex items-center justify-center border-2 border-white hover:bg-gray-800 shadow-lg z-50 cursor-pointer"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onClose();
-                        }}
-                    >
-                        ✕
-                    </button>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
+  const livePlayer = useGameStore(s => {
+    const tid = teamId || player?.teamId;
+    if (!tid) return player;
+    return s.rosters[tid]?.find(p => p.id === player.id) || player;
+  });
+
+  if (!player) return null;
+
+  const { universal, position: positionSpecific } = livePlayer.attributes || player.attributes || {};
+  const displayTeamId = teamId || player.teamId || 'FA';
+  const team = TEAMS.find(t => t.id === displayTeamId);
+  const canEdit = displayTeamId !== 'FA';
+  const rarity = getRarity(livePlayer.ovr);
+  const character = characterFor(livePlayer);
+  const own = displayTeamId === userTeamId;
+  const view = personalityView(livePlayer, { own });
+  // Mood needs his team's situation; free agents have none, so no reasons.
+  const ctx = displayTeamId !== 'FA' && rosters[displayTeamId] ? teamContext({ rosters, standings }, displayTeamId) : null;
+  const mood = moodFor(livePlayer, ctx);
+  const stance = own && ctx ? contractStance(livePlayer, ctx) : null;
+
+  const ovrChange = livePlayer.ovrHistory?.length > 1
+    ? livePlayer.ovr - livePlayer.ovrHistory[livePlayer.ovrHistory.length - 2]
+    : 0;
+
+  const groups = [
+    { name: 'Position skills', category: 'position', attrs: positionSpecific },
+    { name: 'Physical & mental', category: 'universal', attrs: universal },
+  ].filter(g => g.attrs && Object.keys(g.attrs).length);
+
+  const season = livePlayer.stats?.season;
+  const career = livePlayer.stats?.career;
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      eyebrow={team ? `${team.location} ${team.name}` : 'Free agent'}
+      title={livePlayer.name}
+      footer={
+        canEdit ? (
+          <>
+            <Button variant="ghost" onClick={() => setEditMode(e => !e)}>
+              {editMode ? 'Done editing' : 'Edit ratings'}
+            </Button>
+            <Button variant="primary" onClick={onClose}>Close</Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        )
+      }
+    >
+      {/* ── Identity: who he is before what he's rated ── */}
+      <div
+        className="mb-5 flex items-stretch gap-4 rounded-panel px-4 py-4"
+        style={{ background: `linear-gradient(135deg, ${rarity.wash}, transparent 68%)` }}
+      >
+        <PlayerFace player={livePlayer} teamId={displayTeamId} size={112} variant="portrait" lazy={false}
+                    label={`${livePlayer.name}, ${livePlayer.position}`} />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-display text-h2 leading-none tabular-nums text-fg-muted">#{character.number}</span>
+            <PositionTag position={livePlayer.position} />
+            <span className="text-label text-fg-muted">{livePlayer.archetype}</span>
+            {livePlayer.devTrait && livePlayer.devTrait !== 'Normal' && (
+              <Badge tone={livePlayer.devTrait === 'Superstar' ? 'positive' : 'warning'}>
+                {livePlayer.devTrait}
+              </Badge>
+            )}
+          </div>
+          <p className="truncate text-label text-fg-secondary">
+            {character.height} · {character.weightLb} lb · Age {livePlayer.age} · {character.hometown} · {character.college}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={TONE_BADGE[mood.tone]}>{mood.icon} {mood.label}</Badge>
+            {view.traits.map(t => (
+              <Badge key={t.id} tone={TONE_BADGE[t.tone]} title={t.effect}>{t.icon} {t.label}</Badge>
+            ))}
+            {view.hiddenTraits > 0 && <Badge tone="neutral">🔒 +{view.hiddenTraits} unknown</Badge>}
+          </div>
+          <p className="line-clamp-1 text-label italic text-fg-muted">{character.quote}</p>
+          <StatRow className="mt-auto gap-6">
+            <Stat size="sm" value={livePlayer.pot ?? livePlayer.ovr} label="Potential" />
+            <Stat size="sm" value={`$${livePlayer.contract?.salary ?? livePlayer.salary ?? 2}M`} label="Cap hit" />
+            <Stat size="sm" value={`${livePlayer.contract?.yearsLeft ?? 1}yr`} label="Remaining" />
+          </StatRow>
+        </div>
+        <div className="flex shrink-0 flex-col items-end justify-between text-right">
+          <div>
+            <p className="font-display text-display leading-none tabular-nums" style={{ color: rarity.color }}>
+              {livePlayer.ovr}
+            </p>
+            <div className="mt-1 flex items-center justify-end gap-1.5">
+              <RarityChip ovr={livePlayer.ovr} showOvr={false} />
+              {ovrChange !== 0 && (
+                <span className={cx('text-micro tabular-nums', ovrChange > 0 ? 'text-positive-fg' : 'text-negative-fg')}>
+                  {ovrChange > 0 ? '▲' : '▼'}{Math.abs(ovrChange)}
+                </span>
+              )}
+            </div>
+          </div>
+          {team && <TeamCrest team={team} size="md" decorative />}
+        </div>
+      </div>
+
+      <Tabs
+        className="mb-4"
+        value={activeTab}
+        onChange={setActiveTab}
+        label="Player details"
+        items={[
+          { id: 'character', label: 'Character' },
+          { id: 'attributes', label: 'Attributes' },
+          { id: 'stats', label: 'Statistics' },
+        ]}
+      />
+
+      {activeTab === 'character' && (
+        <CharacterTab player={livePlayer} view={view} character={character} mood={own ? mood : null} stance={stance} />
+      )}
+
+      {activeTab === 'attributes' && (
+        <div className="flex flex-col gap-5">
+          {editMode && (
+            <p className="rounded-card bg-warning-bg px-3 py-2 text-label text-warning-fg">
+              Editing is on — click any number to change it.
+            </p>
+          )}
+          {groups.map(({ name, category, attrs }) => (
+            <section key={name}>
+              <h3 className="mb-2.5 text-micro uppercase text-fg-faint">{name}</h3>
+              <div className="flex flex-col gap-2">
+                {Object.entries(attrs)
+                  .filter(([, v]) => v != null)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([key, value]) => (
+                    <AttributeBar
+                      key={key}
+                      label={prettify(key)}
+                      value={value}
+                      color={getRarity(value).color}
+                      editable={canEdit && editMode}
+                      onCommit={(n) => setPlayerAttr(displayTeamId, livePlayer.id, category, key, n)}
+                    />
+                  ))}
+              </div>
+            </section>
+          ))}
+          {canEdit && editMode && (
+            <label className="flex items-center gap-3 border-t border-line-subtle pt-4">
+              <span className="text-label text-fg-secondary">Overall rating</span>
+              <input
+                type="number"
+                defaultValue={livePlayer.ovr}
+                onBlur={e => setPlayerOvr(displayTeamId, livePlayer.id, Math.max(0, Math.min(99, Number(e.target.value))))}
+                className="w-16 rounded-chip border border-team bg-surface-sunken px-2 py-1 text-right text-label tabular-nums text-fg"
+              />
+            </label>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'stats' && (
+        season || career ? (
+          <div className="flex flex-col gap-5">
+            {season && (
+              <section>
+                <h3 className="mb-2.5 text-micro uppercase text-fg-faint">This season</h3>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {Object.entries(season)
+                    .filter(([, v]) => typeof v === 'number' && v !== 0)
+                    .map(([k, v]) => <Stat key={k} size="sm" value={v} label={prettify(k)} />)}
+                </div>
+              </section>
+            )}
+            {career && (
+              <section>
+                <h3 className="mb-2.5 text-micro uppercase text-fg-faint">Career</h3>
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                  {Object.entries(career)
+                    .filter(([, v]) => typeof v === 'number' && v !== 0)
+                    .map(([k, v]) => <Stat key={k} size="sm" value={v} label={prettify(k)} />)}
+                </div>
+              </section>
+            )}
+          </div>
+        ) : (
+          <EmptyState icon="📊" title="No statistics yet"
+                      body="Stats appear once this player has featured in a game." />
+        )
+      )}
+    </Modal>
+  );
 }

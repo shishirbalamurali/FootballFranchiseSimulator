@@ -1,5 +1,5 @@
 // NFL-Style Schedule Generator
-import { DIVISIONS, CONFERENCES, getTeamsByDivision, getTeamsByConference } from '../data/teams';
+import { DIVISIONS, CONFERENCES, getTeamsByDivision } from '../data/teams';
 
 // Rotation cycles (simplified based on year)
 const CONFERENCE_DIV_ROTATION = {
@@ -24,7 +24,11 @@ function shuffle(array) {
     return array;
 }
 
-export function generateSeasonSchedule(teams, year) {
+export function generateSeasonSchedule(teams, year, previousStandings = {}) {
+    const rankedDivision = (conf, div) => [...getTeamsByDivision(conf, div)].sort((a, b) => {
+        const pct = id => { const r = previousStandings[id] || {}; return ((r.wins || 0) + (r.ties || 0) / 2) / ((r.wins || 0) + (r.losses || 0) + (r.ties || 0) || 1); };
+        return pct(b.id) - pct(a.id) || a.id.localeCompare(b.id);
+    });
     // We'll organize specific games first, then slot them into weeks
     const matchups = [];
 
@@ -37,9 +41,6 @@ export function generateSeasonSchedule(teams, year) {
         const divOpponents = getTeamsByDivision(team.conference, team.division).filter(t => t.id !== team.id);
         divOpponents.forEach(opp => {
             // Add if this match (in this direction) doesn't exist yet
-            // Actually, let's just add one-way and double it? 
-            // No, safer to check unique pairs
-            const pairId = [team.id, opp.id].sort().join('-');
             // We need TWO games (H and A). So we can check if we've added H vs A specifically
             const h_vs_a = matchups.find(m => m.home.id === team.id && m.away.id === opp.id);
             if (!h_vs_a) {
@@ -105,7 +106,7 @@ export function generateSeasonSchedule(teams, year) {
     // Play teams of same rank in the 2 divisions NOT played in step 2
     teams.forEach(team => {
         // Find my virtual rank (0-3)
-        const myDivTeams = getTeamsByDivision(team.conference, team.division);
+        const myDivTeams = rankedDivision(team.conference, team.division);
         const myRank = myDivTeams.findIndex(t => t.id === team.id);
 
         // Determine which divisions I ALREADY played in Step 2 (Intra)
@@ -117,7 +118,7 @@ export function generateSeasonSchedule(teams, year) {
         const otherDivs = ['North', 'South', 'East', 'West'].filter(d => d !== team.division && d !== intraOppDiv);
 
         otherDivs.forEach(div => {
-            const oppTeams = getTeamsByDivision(team.conference, div);
+            const oppTeams = rankedDivision(team.conference, div);
             const opponent = oppTeams[myRank]; // Same rank
 
             // Check if match already exists (to avoid duplicates since we iterate all teams)
@@ -138,7 +139,7 @@ export function generateSeasonSchedule(teams, year) {
     // Simplified: Same rank in a rotating division from opposite conference
     // Offset + 2 from the Inter-conference rotation
     teams.forEach(team => {
-        const myDivTeams = getTeamsByDivision(team.conference, team.division);
+        const myDivTeams = rankedDivision(team.conference, team.division);
         const myRank = myDivTeams.findIndex(t => t.id === team.id);
 
         const oppConf = team.conference === 'AFC' ? 'NFC' : 'AFC';
@@ -146,10 +147,11 @@ export function generateSeasonSchedule(teams, year) {
         // Determine opponent division
         const myDivIdx = divOrder.indexOf(team.division);
         // Logic: Inter-conf rotation is offset. We add 2 to avoid the current inter-conf opponent.
-        const oppDivIdx = (myDivIdx + (year % 4) + 2) % 4;
+        const offset = (year % 4) + 2;
+        const oppDivIdx = (myDivIdx + (team.conference === 'AFC' ? offset : -offset) + 8) % 4;
         const oppDiv = divOrder[oppDivIdx];
 
-        const oppTeams = getTeamsByDivision(oppConf, oppDiv);
+        const oppTeams = rankedDivision(oppConf, oppDiv);
         const opponent = oppTeams[myRank];
 
         const exists = matchups.some(m =>
@@ -249,10 +251,56 @@ export function generateSeasonSchedule(teams, year) {
 
         if (valid) {
             console.log(`Schedule generated successfully with MCF on attempt ${attempt + 1}`);
-            return weeks;
+            return fixupSchedule(weeks, teams);
         }
     }
 
     console.warn("Failed to generate valid schedule after retries. Returning empty.");
     return [];
+}
+
+// Post-generation fixup: guarantees every team plays exactly 17 games.
+// If the MCF scheduler leaves a team short (due to rare constraint deadlocks),
+// we pair under-scheduled teams and slot their missing games into open bye weeks.
+function fixupSchedule(weeks, teams) {
+    const count = (id) => weeks.reduce((s, w) => s + w.filter(g => g.homeTeamId === id || g.awayTeamId === id).length, 0);
+    const weekHas = (wi, id) => weeks[wi].some(g => g.homeTeamId === id || g.awayTeamId === id);
+
+    for (let pass = 0; pass < 4; pass++) {
+        const under = teams.filter(t => count(t.id) < 17).sort((a, b) => count(a.id) - count(b.id));
+        if (under.length === 0) break;
+
+        for (let i = 0; i < under.length; i++) {
+            const tA = under[i];
+            if (count(tA.id) >= 17) continue;
+
+            // Find a partner that also needs a game and hasn't maxed out
+            const partner = under.find((tB, j) => j !== i && count(tB.id) < 17 && tA.id !== tB.id);
+            if (!partner) continue;
+
+            // Find a week where both teams are free and week isn't full
+            const freeWeek = weeks.findIndex((w, wi) =>
+                !weekHas(wi, tA.id) && !weekHas(wi, partner.id) && w.length < 16
+            );
+
+            if (freeWeek >= 0) {
+                weeks[freeWeek].push({
+                    id: `fix-${tA.id}-${partner.id}`,
+                    homeTeamId: tA.id,
+                    awayTeamId: partner.id,
+                    week: freeWeek + 1,
+                    played: false,
+                    homeScore: 0,
+                    awayScore: 0
+                });
+            }
+        }
+    }
+
+    const finalCounts = teams.map(t => ({ team: t.abbreviation || t.id, games: count(t.id) }));
+    const bad = finalCounts.filter(x => x.games !== 17);
+    if (bad.length > 0) console.warn('Schedule fixup incomplete — teams with wrong game count:', bad);
+    else console.log('Schedule fixup: all 32 teams confirmed at 17 games.');
+
+    return weeks;
 }

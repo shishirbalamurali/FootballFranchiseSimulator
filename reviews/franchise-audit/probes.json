@@ -1,0 +1,192 @@
+{
+  "injuryAvailability": {
+    "name": "Kobe Rhodes",
+    "injuryRemaining": 7,
+    "attempts": 37
+  },
+  "qbSelection": {
+    "weakAttempts": 35,
+    "strongAttempts": 0
+  },
+  "storyBoost": {
+    "scores": [
+      {
+        "boost": "none",
+        "score": [
+          42,
+          17
+        ]
+      },
+      {
+        "boost": "team_ovr",
+        "score": [
+          42,
+          17
+        ]
+      },
+      {
+        "boost": "win_prob",
+        "score": [
+          42,
+          17
+        ]
+      }
+    ],
+    "identicalStats": true
+  },
+  "fullSeasonSave": {
+    "utf8Bytes": 43559284,
+    "scheduleBytes": 41598782
+  },
+  "tiedPlayoff": {
+    "seed": 32,
+    "id": "afc-wc-3",
+    "homeTeamId": "chargers",
+    "awayTeamId": "titans",
+    "homeScore": 24,
+    "awayScore": 24,
+    "winnerId": "titans",
+    "played": true
+  },
+  "divisionSeeding": {
+    "afc": [
+      {
+        "id": "ravens",
+        "division": "North"
+      },
+      {
+        "id": "bengals",
+        "division": "North"
+      },
+      {
+        "id": "browns",
+        "division": "North"
+      },
+      {
+        "id": "steelers",
+        "division": "North"
+      },
+      {
+        "id": "bills",
+        "division": "East"
+      },
+      {
+        "id": "dolphins",
+        "division": "East"
+      },
+      {
+        "id": "patriots",
+        "division": "East"
+      }
+    ],
+    "southPresent": false
+  },
+  "championDraftSlot": 1,
+  "playEngine": [
+    {
+      "policy": "Hitch without throwing (sack/idle stress)",
+      "phase": "GAME_OVER",
+      "frames": 18867,
+      "plays": 80,
+      "quarter": 4,
+      "score": [
+        0,
+        75
+      ],
+      "stats": {
+        "passYards": 0,
+        "rushYards": 0,
+        "tds": 0,
+        "ints": 0,
+        "completions": 0,
+        "attempts": 0
+      }
+    },
+    {
+      "policy": "HB Dive every snap",
+      "phase": "GAME_OVER",
+      "frames": 13323,
+      "plays": 91,
+      "quarter": 4,
+      "score": [
+        56,
+        46
+      ],
+      "stats": {
+        "passYards": 0,
+        "rushYards": 451,
+        "tds": 8,
+        "ints": 0,
+        "completions": 0,
+        "attempts": 0
+      }
+    }
+  ],
+  "tiedManualEnd": "GAME_OVER",
+  "progressionAttribute": 113,
+  "draftTalent": [
+    {
+      "over90": 3,
+      "over80": 46,
+      "top": 92,
+      "max": 92
+    },
+    {
+      "over90": 4,
+      "over80": 52,
+      "top": 90,
+      "max": 92
+    },
+    {
+      "over90": 2,
+      "over80": 50,
+      "top": 93,
+      "max": 93
+    },
+    {
+      "over90": 8,
+      "over80": 44,
+      "top": 91,
+      "max": 93
+    },
+    {
+      "over90": 1,
+      "over80": 46,
+      "top": 93,
+      "max": 93
+    },
+    {
+      "over90": 1,
+      "over80": 45,
+      "top": 89,
+      "max": 90
+    },
+    {
+      "over90": 1,
+      "over80": 44,
+      "top": 91,
+      "max": 91
+    },
+    {
+      "over90": 2,
+      "over80": 44,
+      "top": 90,
+      "max": 91
+    },
+    {
+      "over90": 5,
+      "over80": 51,
+      "top": 93,
+      "max": 93
+    },
+    {
+      "over90": 3,
+      "over80": 42,
+      "top": 91,
+      "max": 93
+    }
+  ],
+  "depthShortage": {
+    "note": "See ratings probe in results.json; no enforceable depth editing found in Roster.jsx"
+  }
+}

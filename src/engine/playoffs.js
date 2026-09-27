@@ -1,5 +1,35 @@
 // Playoff seeding and bracket logic
 
+const winPctOf = s => {
+    const games = (s?.wins || 0) + (s?.losses || 0) + (s?.ties || 0);
+    return games ? ((s.wins || 0) + (s.ties || 0) / 2) / games : 0;
+};
+
+// Win percentage (ties count half), then division wins, then point differential.
+const compareRecords = (standings) => (a, b) => {
+    const sa = standings[a] || {}, sb = standings[b] || {};
+    return winPctOf(sb) - winPctOf(sa)
+        || (sb.divWins || 0) - (sa.divWins || 0)
+        || ((sb.pf || 0) - (sb.pa || 0)) - ((sa.pf || 0) - (sa.pa || 0))
+        || String(a).localeCompare(String(b));
+};
+
+// The store's seeding: returns 7 team ids per conference. Seeds 1-4 are the
+// division winners, 5-7 the best remaining records — a weak division winner
+// still hosts a wild-card game ahead of a stronger second-place team.
+export function seedConference(teams, standings, conference) {
+    const cmp = compareRecords(standings);
+    const confTeams = teams.filter(t => t.conference === conference);
+    const winners = [];
+    for (const div of [...new Set(confTeams.map(t => t.division))]) {
+        const best = confTeams.filter(t => t.division === div).map(t => t.id).sort(cmp)[0];
+        if (best) winners.push(best);
+    }
+    winners.sort(cmp);
+    const wildCards = confTeams.map(t => t.id).filter(id => !winners.includes(id)).sort(cmp);
+    return [...winners, ...wildCards].slice(0, 7);
+}
+
 // Calculate playoff seeds for a conference
 export function calculatePlayoffSeeds(standings, conference) {
     const conferenceTeams = standings.filter(t => t.conference === conference);
