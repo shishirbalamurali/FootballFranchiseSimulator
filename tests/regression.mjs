@@ -41,7 +41,9 @@ try {
  assert.equal(store.getState().draftClass.length,126);
  store.getState().finalizeDraft();
  assert.equal(store.getState().draftArchive.at(-1).picks.length,224);
- assert.equal(Object.values(store.getState().draftPickOwners).flat().length,224);
+ // CLAUDE: clubs hold the next two drafts' picks (7 rounds × 32 × 2 years).
+ assert.equal(Object.values(store.getState().draftPickOwners).flat().length,448);
+ assert.ok(Object.values(store.getState().draftPickOwners).flat().every(p => p.year === store.getState().year + 1 || p.year === store.getState().year + 2));
  for (const t of TEAMS.filter(t => t.id !== store.getState().userTeamId)) {
   const r=store.getState().rosters[t.id];
   assert.equal(r.length,53,`${t.id} post-draft roster`);

@@ -23,6 +23,8 @@
 // produces NFL-average results and tests/calibration.mjs keeps the league in
 // line with 2022-24 production.
 
+import { createXFactorGame } from './xFactor.js';
+
 // ── RANDOM HELPERS ────────────────────────────────────────────────────────────
 
 export function gaussian(mean, stdev) {
@@ -358,6 +360,10 @@ export function playGame(home, away, opts = {}) {
     // Home teams get a crowd edge on top of the -3 their visitors' defense plays at.
     const offense = [0, 1].map(i => buildOffense(teams[i], teams[1 - i], i === 0 ? 3 : 0, weather, plans[i], form[i].off - form[1 - i].def + (i === 0 ? HOME_EDGE : 0)));
     const defense = [0, 1].map(i => buildDefense(teams[i]));
+    // X-Factors: one-of-a-kind abilities that switch on during the game.
+    const xf = createXFactorGame(teams, { playoff: !allowTie });
+    let tdInfo = {};
+    const drive = { side: -1, plays: 0, sacked: false, scored: false };
 
     // Name table for the play log: player id → index; entries are [name, position, side]
     const names = [];
@@ -407,6 +413,8 @@ export function playGame(home, away, opts = {}) {
     const restamp = tuple => { tuple[12] = g.score[0]; tuple[13] = g.score[1]; };
 
     const lead = side => g.score[side] - g.score[1 - side];
+    const sit = side => ({ q: g.q, clock: g.clock, down: g.down, togo: g.togo, yl: g.yl, offense: side, lead: [lead(0), lead(1)] });
+    const xm = (stat, side, actors) => (xf.any ? xf.mult(stat, sit(side), actors) : 1);
     const gameLeft = () => (g.q >= 5 ? g.clock : g.clock + 900 * (4 - g.q));
     const isLateHalf = secs => (g.q === 2 || g.q === 4 || g.q >= 5) && g.clock <= secs;
 
@@ -526,6 +534,10 @@ export function playGame(home, away, opts = {}) {
         let p = 0.975 - Math.pow(d / 37, 2.2) * 0.5;
         p += (u.kAcc - LG.kickAcc) * 0.004;
         p *= u.weatherKick;
+        if (xf.any && u.kicker) {
+            p *= xm('fgAcc', g.poss, { kicker: u.kicker.id });
+            if (dist >= 45) p *= xm('fgRange', g.poss, { kicker: u.kicker.id });
+        }
         return clamp(p, 0.05, 0.995);
     }
 
@@ -537,6 +549,8 @@ export function playGame(home, away, opts = {}) {
         const line = S(side, k);
         if (line) { line.fga++; if (made) line.fgm++; }
         const tuple = record({ kind: made ? KIND.FG : KIND.FG_MISS, yards: dist, a: ref(side, k) });
+        if (xf.any && k) xf.event(made ? 'fgMade' : 'fgMiss', sit(side), { side, kicker: k.id, yards: dist });
+        if (made) drive.scored = true;
         tick(5, true, side);
         endPossession();
         if (made) {
@@ -568,7 +582,7 @@ export function playGame(home, away, opts = {}) {
         const line = S(side, u.kicker);
         if (line) { line.xpa++; if (good) line.xpm++; }
         const t = record({ off: side, kind: good ? KIND.XP : KIND.XP_MISS, yl: 85, down: 0, togo: 0, a: ref(side, u.kicker) });
-        if (good) { addPoints(side, 1, null); restamp(t); }
+        if (good) { addPoints(side, 1, null); restamp(t); if (xf.any && u.kicker) xf.event('xpMade', sit(side), { side, kicker: u.kicker.id }); }
     }
 
     // In overtime a score that takes the lead ends it once both teams have had
@@ -586,6 +600,9 @@ export function playGame(home, away, opts = {}) {
         const base = g.score[side];
         addPoints(side, 6, kindTag);
         restamp(tuple);
+        if (drive.side === side) drive.scored = true;
+        if (xf.any) xf.event('td', sit(side), { side, ...tdInfo });
+        tdInfo = {};
         const ev = g.scoring[g.scoring.length - 1];
         if (!defensive) { g.poss = side; endPossession(); }
         g.poss = side;
@@ -692,6 +709,11 @@ export function playGame(home, away, opts = {}) {
         const side = g.poss, def = 1 - side;
         const u = offense[side];
         const dfn = defense[def];
+        if (drive.side !== side) {
+            if (xf.any && drive.side >= 0) xf.event('driveEnd', sit(drive.side), { side: drive.side, plays: drive.plays, sacked: drive.sacked, scored: drive.scored });
+            drive.side = side; drive.plays = 0; drive.sacked = false; drive.scored = false;
+        }
+        drive.plays++;
 
         if (canKneel(side)) {
             const t = record({ kind: KIND.KNEEL, yards: -1, a: ref(side, u.qb) });
@@ -778,15 +800,17 @@ export function playGame(home, away, opts = {}) {
         g.lastSpike = false;
 
         // Sack
-        if (!ctx.hail && chance(u.pSack * (obvious ? 1.18 : 0.92) * (garbage ? 0.7 : 1))) {
+        if (!ctx.hail && chance(u.pSack * (obvious ? 1.18 : 0.92) * (garbage ? 0.7 : 1) * xm('pSack', side, { qb: u.qb?.id }))) {
             const sacker = pick(dfn.rushers);
+            drive.sacked = true;
+            if (xf.any) xf.event('sack', sit(side), { side, qb: u.qb?.id, defender: sacker?.id });
             const loss = Math.round(clamp(gaussian(6.8, 2.4), 1, 14));
             const allowed = u.team.depth.ol.length ? weightedPick(u.team.depth.ol.map(p => ({ p, weight: Math.pow(Math.max(1, 100 - (p.attributes?.position?.passBlock || 70)), 2) })))?.p : null;
             if (allowed) { const l = S(side, allowed); if (l) l.sacksAllowed++; }
             if (qbLine) qbLine.sacks++;
             if (sacker) { const l = S(def, sacker); if (l) l.sacks++; }
             team[side].sacks++; team[side].sackYds += loss;
-            const strip = chance(0.075);
+            const strip = chance(0.075 * xm('strip', side, {}));
             const t = record({ kind: KIND.SACK, yards: -loss, a: qbRef, x: ref(def, sacker), flags: strip ? FLAG.FUMBLE | FLAG.TURNOVER : 0 });
             g.yl -= loss;
             if (g.yl <= 0) { tick(6, false, side); safety(def, t); return; }
@@ -834,7 +858,8 @@ export function playGame(home, away, opts = {}) {
         if (rLine) rLine.targets++;
         const tRef = ref(side, tgt.p);
 
-        let pC = u.pCmp * tgt.catchMult;
+        const actors = { qb: u.qb?.id, target: tgt.p.id };
+        let pC = u.pCmp * tgt.catchMult * xm('pCmp', side, actors) * xm('catch', side, actors);
         if (toGoal <= 10) pC *= 0.86;
         else if (toGoal <= 20) pC *= 0.93;
         if (garbage) pC += 0.06;
@@ -851,6 +876,7 @@ export function playGame(home, away, opts = {}) {
                 if (tgt.pos === 'RB' && chance(0.12)) yds -= Math.round(1 + Math.random() * 3);
                 if (toGoal <= 20 && yds > 0 && yds < toGoal && chance(0.08)) yds = toGoal;
             }
+            if (!ctx.hail && xf.any && yds > 0) yds = Math.round(yds * xm('passYds', side, actors) * xm('recYds', side, actors));
             yds = Math.min(yds, toGoal);
             if (ctx.hail && !chance(0.35)) yds = Math.max(1, toGoal - Math.round(2 + Math.random() * 6));
             if (qbLine) { qbLine.completions++; qbLine.yards += yds; }
@@ -863,9 +889,11 @@ export function playGame(home, away, opts = {}) {
             const t = record({ kind: KIND.PASS, yards: yds, a: qbRef, b: tRef, x: ref(def, tackler),
                 flags: (oob ? FLAG.OOB : 0) | (fumble ? FLAG.FUMBLE | FLAG.TURNOVER : 0) | (ctx.hail ? FLAG.HAIL_MARY : 0) });
             g.yl += yds;
+            if (xf.any) xf.event('completion', sit(side), { side, ...actors, yards: yds });
             if (td) {
                 if (qbLine) qbLine.tds++;
                 if (rLine) { rLine.recTds++; rLine.tds++; }
+                tdInfo = actors;
                 t[11] |= FLAG.TD;
                 tick(6, true, side);
                 touchdown(side, 'PASS', t);
@@ -885,15 +913,16 @@ export function playGame(home, away, opts = {}) {
         }
 
         // Incomplete — or picked off
-        const intP = ctx.hail ? 0.22 : u.pInt * 1.75 * (garbage ? 0.9 : 1) * (hurry(side) && lead(side) < 0 ? 1.25 : 1);
+        const intP = ctx.hail ? 0.22 : u.pInt * 1.75 * (garbage ? 0.9 : 1) * (hurry(side) && lead(side) < 0 ? 1.25 : 1) * xm('pInt', side, actors);
         if (chance(intP)) {
             const hawk = pick(dfn.ballhawks);
+            if (xf.any) xf.event('int', sit(side), { side, qb: u.qb?.id, defender: hawk?.id });
             if (qbLine) qbLine.ints++;
             if (hawk) { const l = S(def, hawk); if (l) l.ints++; }
             team[side].turnovers++;
             const air = ctx.hail ? toGoal : Math.round(clamp(gaussian(13, 7), 2, toGoal));
             const spotForDef = 100 - Math.min(99, g.yl + air); // defense's yardline at the catch
-            const sixP = 0.055 + (spotForDef >= 60 ? 0.07 : 0);
+            const sixP = (0.055 + (spotForDef >= 60 ? 0.07 : 0)) * xm('pickSix', side, {});
             let ret = Math.round(Math.min(expo(11), 99 - spotForDef));
             const six = !ctx.hail && chance(sixP);
             if (six) ret = 100 - spotForDef;
@@ -913,8 +942,9 @@ export function playGame(home, away, opts = {}) {
         let x = -1, flags = ctx.hail ? FLAG.HAIL_MARY : 0;
         if (chance(0.46)) {
             const cov = pick(dfn.cover);
-            if (cov) { const l = S(def, cov); if (l) l.pd++; x = ref(def, cov); flags |= FLAG.DEFENDED; }
+            if (cov) { const l = S(def, cov); if (l) l.pd++; x = ref(def, cov); flags |= FLAG.DEFENDED; if (xf.any) xf.event('pd', sit(side), { side, defender: cov.id }); }
         }
+        if (xf.any) xf.event('incomplete', sit(side), { side, ...actors });
         const t = record({ kind: KIND.INC, a: qbRef, b: tRef, x, flags });
         advanceDown(0, t);
         tick(5, true, side);
@@ -943,7 +973,8 @@ export function playGame(home, away, opts = {}) {
         const carrier = designed ? u.qb : back ? back.p : u.qb;
         const line = S(side, carrier);
         const ypc = designed ? u.qbYpc : back ? back.ypc : 3.5;
-        const burst = designed ? 0.05 : back ? back.burst : 0.03;
+        const runActors = { carrier: carrier?.id };
+        const burst = (designed ? 0.05 : back ? back.burst : 0.03) * xm('burst', side, runActors);
         const shortYardage = g.togo <= 2 && g.down >= 3;
 
         // Mixture: stuffed-to-steady base, a "good run" band and breakaways
@@ -956,9 +987,10 @@ export function playGame(home, away, opts = {}) {
         else yds = gaussian(baseMean, 2.4);
         if (toGoal <= 4) yds += 0.2 + (back?.goalLine || 0);
         if (shortYardage) yds += 0.35;
+        if (xf.any && yds > 0) yds *= xm('runYds', side, runActors);
         yds = Math.round(clamp(yds, -6, toGoal));
 
-        const fumble = yds < toGoal && chance(back ? back.fumble : 0.009);
+        const fumble = yds < toGoal && chance((back ? back.fumble : 0.009) * xm('fumble', side, runActors));
         const lost = fumble && chance(0.5);
         if (line) { line.carries++; line.rushYards += yds; if (fumble) line.fumbles++; }
         team[side].rushAtt++; team[side].rushYds += yds;
@@ -968,7 +1000,11 @@ export function playGame(home, away, opts = {}) {
         if (!td) {
             tackler = yds <= 0 ? (pick(dfn.stuffers) || pick(dfn.runTacklers)) : pick(dfn.runTacklers);
             creditTackle(def, dfn.runTacklers, tackler);
-            if (yds < 0 && tackler) { const l = S(def, tackler); if (l) l.tfl++; flags |= FLAG.TFL; }
+            if (yds < 0 && tackler) { const l = S(def, tackler); if (l) l.tfl++; flags |= FLAG.TFL; if (xf.any) xf.event('tfl', sit(side), { side, defender: tackler.id }); }
+        }
+        if (xf.any) {
+            xf.event('run', sit(side), { side, carrier: carrier?.id, yards: yds, firstDown: yds >= g.togo });
+            if (lost) xf.event('fumble', sit(side), { side, carrier: carrier?.id });
         }
         if (lost) flags |= FLAG.FUMBLE | FLAG.TURNOVER;
         const t = record({ kind: KIND.RUN, yards: yds, a: ref(side, carrier), x: ref(def, tackler), flags });
@@ -976,6 +1012,7 @@ export function playGame(home, away, opts = {}) {
         if (td) {
             if (line) { line.rushTds++; line.tds++; }
             t[11] |= FLAG.TD;
+            tdInfo = runActors;
             tick(5, true, side);
             touchdown(side, 'RUSH', t);
             return;
@@ -1068,5 +1105,7 @@ export function playGame(home, away, opts = {}) {
         names,
         form: form.map(f => ({ off: Math.round(f.off * 10) / 10, def: Math.round(f.def * 10) / 10 })),
         plans: plans.map(p => p.label),
+        xfactor: xf.any ? xf.summary() : [],
+        xfLog: xf.log,
     };
 }

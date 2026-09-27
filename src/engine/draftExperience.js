@@ -1,6 +1,8 @@
+import { schoolFor, isPowerSchool } from './collegeSeason.js'; // CLAUDE: fictional schools
 // Public prospect information and transactional pick handling.
-export const pickKey = p => `${p.year || ''}:${p.originalTeamId}:${p.round}`;
-export const pickValue = number => Math.round(3000 / Math.pow(1 + (number - 1) / 12, 1.15));
+export const pickKey = p => `${p.year || ''}:${p.originalTeamId}:${p.round}${p.comp ? `:c${p.comp}` : ''}`; // CLAUDE: comp picks
+// CLAUDE: one pick chart for the whole game (see assetValue.js).
+export { pickNumberValue as pickValue } from './assetValue.js';
 export const winPct = s => ((s?.wins || 0) + (s?.ties || 0) / 2) / ((s?.wins || 0) + (s?.losses || 0) + (s?.ties || 0) || 1);
 export function draftTeamOrder(teams, standings, schedule = [], bracket) {
     // How far each team went in the postseason (store bracket schema:
@@ -48,10 +50,9 @@ export function exchangePicks(owners, order, currentIndex, from, to, give, recei
     const updated = order.map((p, i) => i < currentIndex ? p : give.some(g => pickKey(g) === pickKey(p)) ? { ...p, teamId: to } : receive.some(g => pickKey(g) === pickKey(p)) ? { ...p, teamId: from } : p);
     return { draftPickOwners: next, draftOrder: updated, onClockTeamId: updated[currentIndex]?.teamId || null };
 }
-const SCHOOLS = ['Ohio State', 'Michigan', 'Alabama', 'Georgia', 'LSU', 'Texas', 'Oregon', 'Penn State', 'Notre Dame', 'USC', 'Clemson', 'Florida State', 'Boise State', 'Tulane', 'Memphis', 'North Dakota State'];
 export function collegeProfile(player, year, index) {
     const rand = (min, max) => Math.round(min + Math.random() * (max - min));
-    const school = SCHOOLS[index % SCHOOLS.length];
+    const school = schoolFor(`${player.id}:${index}`); // CLAUDE
     const seasons = Array.from({ length: Math.min(4, Math.max(2, player.age - 19)) }, (_, i) => {
         const games = rand(10, 14), factor = 0.65 + i * 0.12;
         const n = (a, b) => Math.round(rand(a, b) * factor);
@@ -73,5 +74,5 @@ export function collegeProfile(player, year, index) {
         ['Small details', `Built his reputation through film study at ${school}. Teams see a dependable prospect whose athletic ceiling remains debated.`],
     ];
     const arc = arcs[index % arcs.length];
-    return { school, seasons, headline: arc[0], story: arc[1], competition: index % SCHOOLS.length < 12 ? 'Major conference' : 'Group of Five / FCS', generated: true };
+    return { school, seasons, headline: arc[0], story: arc[1], competition: isPowerSchool(school) ? 'Power conference' : 'Group of Five / FCS', generated: true };
 }

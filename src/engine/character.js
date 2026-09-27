@@ -387,7 +387,7 @@ export function wantsOut(player, ctx) {
 export function faPreferences(player) {
   const c = characterFor(player);
   const a = c.axes, has = id => c.traits.includes(id);
-  const prefs = { moneyPower: 1, winWeight: 0.12, loyalWeight: 0.06, starterWeight: 0.05, notes: [] };
+  const prefs = { moneyPower: 1, winWeight: 0.12, loyalWeight: 0.06, starterWeight: 0.05, security: Math.max(0, Math.min(1, (100 - a.greed + (player.age ?? 25) * 2 - 50) / 100)), notes: [] };
   if (has('mercenary') || a.greed >= 80) {
     prefs.moneyPower = 1.4; prefs.winWeight = 0.04; prefs.loyalWeight = 0;
     prefs.notes.push('follows the money');

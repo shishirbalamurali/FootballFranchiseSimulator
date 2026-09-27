@@ -86,7 +86,9 @@ try {
     // The draft still starts, and CPU depth gets filled legally afterwards.
     s().startDraft();
     assert.equal(s().phase, 'draft');
-    assert.equal(s().draftOrder.length, 224);
+    assert.equal(s().draftOrder.filter(p => !p.comp).length, 224);
+    // Compensatory picks close rounds 3-7 for clubs that lost free agents.
+    assert.ok(s().draftOrder.filter(p => p.comp).every(p => p.round >= 3 && p.round <= 7));
     console.log('faMarket.mjs: all assertions passed');
 } finally {
     await server.close();

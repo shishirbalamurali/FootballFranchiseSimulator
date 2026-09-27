@@ -92,7 +92,8 @@ try {
         if (state.onClockTeamId === user) state.makePick(state.draftClass[0].id); else state.simOneCpuPick();
     }
     store.getState().finalizeDraft();
-    assert.equal(store.getState().collegePipeline.length,1400);
+    // CLAUDE: early declarations move ~25-40 juniors into the draft a year early.
+    assert.ok(store.getState().collegePipeline.length >= 1300 && store.getState().collegePipeline.length <= 1400, `pipeline ${store.getState().collegePipeline.length}`);
     assert.equal(store.getState().collegeAlumni.find(p => p.id === watched.id).name,watched.name);
     assert.equal(store.getState().collegeAlumni.find(p => p.id === watched.id).seasons.length,4);
     assert.ok(!store.getState().collegePipeline.some(p => p.id===watched.id));
@@ -112,7 +113,7 @@ try {
     assert.equal(reloaded.getState().coachingStaff.find(c => c.id===candidate.id).history.length,store.getState().coachingStaff.find(c => c.id===candidate.id).history.length);
     const snapshot = JSON.stringify({coachingStaff:store.getState().coachingStaff,collegePipeline:store.getState().collegePipeline,assistantSettings:store.getState().assistantSettings});
     const parsed = JSON.parse(snapshot);
-    assert.equal(parsed.collegePipeline.length,1400); assert.equal(parsed.coachingStaff.length,store.getState().coachingStaff.length);
+    assert.equal(parsed.collegePipeline.length,store.getState().collegePipeline.length); assert.equal(parsed.coachingStaff.length,store.getState().coachingStaff.length);
     // Existing saves acquire missing systems without replacing the franchise.
     store.setState({coachingStaff:[],collegePipeline:[],year:2035}); store.getState().ensureFranchiseSystems();
     assert.equal(store.getState().collegePipeline[0].draftYear,2036);

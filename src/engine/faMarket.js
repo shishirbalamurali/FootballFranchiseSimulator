@@ -10,6 +10,8 @@ import { askingSalary } from './progression';
 import { rosterSalary, rookieReserve } from './cpuRosterManagement';
 import { ROSTER_COMPOSITION, ROSTER_LIMIT } from './player';
 import { faPreferences } from './character.js';
+import { structuredContract, structureValue } from './contracts.js';
+import { agentFor } from './people.js';
 
 export const SALARY_CAP = 200;
 export const FA_DAYS = 4;
@@ -121,9 +123,12 @@ export function assessOffer(p, offer, ctx) {
     // Personality decides what an offer is worth to him: money, a winner,
     // a starting job, or coming home.
     const prefs = faPreferences(p);
-    const value = Math.pow(salary / ask, prefs.moneyPower) * termFit
-        * (1 + prefs.winWeight * (appeal - 0.5) + (loyal ? prefs.loyalWeight : 0) + (starter ? prefs.starterWeight : 0));
-    const margin = value - rivalBar(ctx.suitorCount || 0);
+    // Structure (guarantees, bonus) is worth real money to security-minded players.
+    const struct = structureValue({ salary, years, guaranteed: salary * years * (offer?.guaranteePct || 0), bonus: salary * years * (offer?.bonusPct || 0) }, { security: prefs.security ?? 0.5 });
+    const agent = agentFor(p.id);
+    const value = Math.pow(salary / ask, prefs.moneyPower) * termFit * struct
+        * (1 + prefs.winWeight * (appeal - 0.5) + (loyal ? prefs.loyalWeight : 0) + (starter ? prefs.starterWeight : 0) + (ctx.extra?.bonus || 0));
+    const margin = value - rivalBar(ctx.suitorCount || 0) * agent.style.askMult - (ctx.extra?.agentGrudge || 0);
     const chance = Math.max(0.03, Math.min(0.97, 0.55 + margin * 3));
     const verdict = margin >= 0.08 ? 'Very likely' : margin >= 0 ? 'Likely' : margin >= -0.1 ? 'Toss-up' : 'Unlikely';
     const notes = [];
@@ -132,7 +137,9 @@ export function assessOffer(p, offer, ctx) {
     if (starter) notes.push('he would start for you');
     if (loyal) notes.push('hometown discount');
     if ((ctx.suitorCount || 0) >= 4) notes.push(`${ctx.suitorCount} rival suitors`);
-    notes.push(...prefs.notes);
+    if (struct > 1.01) notes.push('likes the guarantees');
+    if (agent.style.id === 'hardball') notes.push(`${agent.name} plays hardball`);
+    notes.push(...prefs.notes, ...(ctx.extra?.notes || []));
     return { chance, margin, verdict, reason: notes.join(' · ') };
 }
 
@@ -174,9 +181,9 @@ export function resolveMarketDay(state, rng = Math.random) {
     for (const p of offered) {
         const offer = offers[p.id];
         const suitors = suitorsFrom(p, summaries, standings);
-        const read = assessOffer(p, offer, { userTeamId, userRoster, standings, suitorCount: suitors.length, floor: floors[p.id] });
+        const read = assessOffer(p, offer, { userTeamId, userRoster, standings, suitorCount: suitors.length, floor: floors[p.id], extra: state.extras?.[p.id] });
         if (read.chance > 0 && rng() < read.chance) {
-            const contract = { salary: offer.salary, years: offer.years, yearsLeft: offer.years };
+            const contract = structuredContract({ salary: offer.salary, years: offer.years, guaranteePct: offer.guaranteePct || 0, bonusPct: offer.bonusPct || 0, year: state.year, incentive: offer.incentive || null });
             signings.push({ player: p, teamId: userTeamId, contract, byUser: true });
             taken.add(p.id);
             continue;
@@ -208,13 +215,14 @@ export function resolveMarketDay(state, rng = Math.random) {
 }
 
 /** Cap/roster check for the user's pending offers. */
-export function offerBudget({ userRoster = [], offers = {}, pool = [], exceptId = null }) {
+export function offerBudget({ userRoster = [], offers = {}, pool = [], exceptId = null, deadCap = 0 }) {
     const pending = Object.entries(offers).filter(([id]) => id !== exceptId && pool.some(p => p.id === id));
     const committed = pending.reduce((sum, [, o]) => sum + (o.salary || 0), 0);
-    const payroll = rosterSalary(userRoster);
+    const payroll = rosterSalary(userRoster) + deadCap;
     return {
         payroll,
         committed,
+        deadCap,
         space: SALARY_CAP - payroll - committed,
         rosterSize: userRoster.length,
         openSpots: ROSTER_LIMIT - userRoster.length - pending.length,

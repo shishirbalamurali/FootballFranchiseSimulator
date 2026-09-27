@@ -102,7 +102,8 @@ export function simulateGame(homeTeam, awayTeam, homeRoster, awayRoster, homeBon
         // scoring play in order, and the full play-by-play with its name table.
         quarters:        game.quarters,
         scoringLog:      game.scoringLog,
-        pbp:             { plays: game.plays, names: game.names, form: game.form, plans: game.plans },
+        pbp:             { plays: game.plays, names: game.names, form: game.form, plans: game.plans, xf: game.xfLog },
+        xfactor:         game.xfactor,
     };
 }
 
