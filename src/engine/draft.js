@@ -363,8 +363,9 @@ const STYLE_WEIGHTS = {
     BALANCED: [0.45, 0.40, 0.15],
 };
 
-// CPU draft decision — respects team's draftStyle
-export function cpuMakePick(roster, availableProspects, draftStyle = 'BALANCED') {
+// Deterministic part of a CPU pick: every prospect's score for this club.
+// CLAUDE: shared with the league mock draft (scouting.js mockDraft).
+export function scoreProspects(roster, availableProspects, draftStyle = 'BALANCED') {
     const needScores = calculatePositionNeeds(roster);
     const style = STYLE_BIAS[draftStyle] || STYLE_BIAS.BALANCED;
     const [wVal, wNeed, wScar] = STYLE_WEIGHTS[draftStyle] || STYLE_WEIGHTS.BALANCED;
@@ -373,9 +374,8 @@ export function cpuMakePick(roster, availableProspects, draftStyle = 'BALANCED')
     const existingQBs = (roster || []).filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr);
     const hasQBStarter = existingQBs.length > 0 && existingQBs[0].ovr >= 72;
 
-    if (!availableProspects.length) return null;
     const scarcity = Object.fromEntries(Object.keys(POSITION_VALUE).map(pos => [pos, calculateScarcity(pos, availableProspects)]));
-    const scoredProspects = availableProspects.map(prospect => {
+    return availableProspects.map(prospect => {
         let posValue = POSITION_VALUE[prospect.position] || 1.0;
         const styleMult = style[prospect.position] || 1.0;
 
@@ -393,11 +393,17 @@ export function cpuMakePick(roster, availableProspects, draftStyle = 'BALANCED')
         const needScore = needScores[prospect.position] || 0;
         const scarcityScore = scarcity[prospect.position] || 20;
 
-        const totalScore = valueScore * wVal + needScore * wNeed + scarcityScore * wScar;
+        return { prospect, score: valueScore * wVal + needScore * wNeed + scarcityScore * wScar };
+    });
+}
 
+// CPU draft decision — respects team's draftStyle
+export function cpuMakePick(roster, availableProspects, draftStyle = 'BALANCED') {
+    if (!availableProspects.length) return null;
+    const scoredProspects = scoreProspects(roster, availableProspects, draftStyle).map(({ prospect, score }) => {
         // Slight variance — every team deviates occasionally
-        const variance = totalScore * (Math.random() * 0.08 - 0.02);
-        return { prospect, score: totalScore + variance };
+        const variance = score * (Math.random() * 0.08 - 0.02);
+        return { prospect, score: score + variance };
     });
 
     scoredProspects.sort((a, b) => b.score - a.score);

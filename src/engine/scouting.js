@@ -11,7 +11,7 @@
 import { hashSeed, seededRng } from './seededRandom.js';
 import { scoutProfile, REGIONS, biasInfo } from './people.js';
 import { regionOfSchool } from './collegeSeason.js';
-import { calculatePositionNeeds } from './draft.js';
+import { scoreProspects } from './draft.js';
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const OVR_SD = 6, POT_SD = 7;
@@ -151,9 +151,8 @@ export function consensus(draftClass, teamIds) {
  * the way the CPU drafts (minus the dice). Returns the same shape as
  * consensus(): Map(id → { grade, rank, lo, hi, team }).
  */
-export function mockDraft(draftClass, order, rosters = {}) {
-    const pool = new Map(draftClass.map(p => [p.id, p]));
-    const needsFor = new Map();
+export function mockDraft(draftClass, order, rosters = {}, styles = {}) {
+    const remaining = new Map(draftClass.map(p => [p.id, p]));
     const added = {};
     const avgGrade = new Map(draftClass.map(p => {
         const grades = order.slice(0, 32).map(t => cpuView(p, t).grade);
@@ -161,27 +160,21 @@ export function mockDraft(draftClass, order, rosters = {}) {
     }));
     const out = new Map();
     order.forEach((teamId, i) => {
-        if (!pool.size) return;
-        if (!needsFor.has(teamId)) needsFor.set(teamId, calculatePositionNeeds([...(rosters[teamId] || []), ...(added[teamId] || [])]));
-        const needs = needsFor.get(teamId);
-        const qb = (rosters[teamId] || []).filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr)[0];
-        let best = null, bestScore = -Infinity;
-        for (const p of pool.values()) {
-            if (i < 128 && (p.position === 'K' || p.position === 'P')) continue;
-            const g = cpuView(p, teamId).grade;
-            const pv = p.position === 'QB' && qb?.ovr >= 72 ? 0.6 : (DRAFT_POSITION_VALUE[p.position] || 1);
-            const score = g * pv * 0.45 + (needs[p.position] || 50) * 0.4;
-            if (score > bestScore) { bestScore = score; best = p; }
-        }
+        if (!remaining.size) return;
+        // The club's own board, scored exactly as the CPU drafts (minus the dice).
+        const board = [...remaining.values()].map(p => { const v = cpuView(p, teamId); return { ...p, grade: v.grade, ovr: v.ovr, pot: v.pot }; });
+        const scored = scoreProspects([...(rosters[teamId] || []), ...(added[teamId] || [])], board, styles[teamId]);
+        let best = null;
+        for (const x of scored) if (!best || x.score > best.score) best = x;
         if (!best) return;
-        pool.delete(best.id);
-        (added[teamId] ||= []).push(best);
-        needsFor.delete(teamId);
+        const pick = remaining.get(best.prospect.id);
+        remaining.delete(pick.id);
+        (added[teamId] ||= []).push(pick);
         const spread = Math.max(2, Math.round(3 + i * 0.1));
-        out.set(best.id, { grade: Math.round(avgGrade.get(best.id) * 10) / 10, rank: i + 1, lo: Math.max(1, i + 1 - spread), hi: i + 1 + spread, team: teamId });
+        out.set(pick.id, { grade: Math.round(avgGrade.get(pick.id) * 10) / 10, rank: i + 1, lo: Math.max(1, i + 1 - spread), hi: i + 1 + spread, team: teamId });
     });
     // Everyone left is projected undrafted, ordered by grade.
-    [...pool.values()].sort((a, b) => avgGrade.get(b.id) - avgGrade.get(a.id)).forEach((p, j) => {
+    [...remaining.values()].sort((a, b) => avgGrade.get(b.id) - avgGrade.get(a.id)).forEach((p, j) => {
         const rank = order.length + j + 1;
         out.set(p.id, { grade: Math.round(avgGrade.get(p.id) * 10) / 10, rank, lo: rank - 10, hi: rank + 10, team: null, undrafted: true });
     });

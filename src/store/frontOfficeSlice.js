@@ -280,6 +280,14 @@ export const frontOfficeActions = (set, get) => ({
             rosters[s.userTeamId] = r.roster;
             if (r.boosted) headlines.push(news(`${dev.name}'s young players take a step`, `${r.boosted} young player${r.boosted === 1 ? '' : 's'} improved an extra point this offseason.`, '🌱', s.userTeamId, 'DEVELOPMENT'));
         }
+        const qbCoach = coaches.find(c => c.teamId === s.userTeamId && c.role === 'QB Coach');
+        if (qbCoach) {
+            const mine = rosters[s.userTeamId] || [];
+            const r = developmentBoost(mine.filter(p => p.position === 'QB'), coachProfile(qbCoach, s.year).ratings.development + 15, s.year + 1);
+            const byId = new Map(r.roster.map(p => [p.id, p]));
+            rosters[s.userTeamId] = mine.map(p => byId.get(p.id) || p);
+            if (r.boosted) headlines.push(news(`${qbCoach.name}'s quarterback room improves`, `${r.boosted} young QB${r.boosted === 1 ? '' : 's'} took an extra step.`, '🎯', s.userTeamId, 'DEVELOPMENT'));
+        }
         for (const id of TEAM_IDS) {
             rosters[id] = (rosters[id] || []).map(p => {
                 const t = trajectoryOf(p).id, age = p.age || 26;
@@ -313,7 +321,11 @@ export const frontOfficeActions = (set, get) => ({
                 break;
             }
         }
-        const scouting = s.scouting ? { ...s.scouting, interviews: [], visits: [], year: s.year + 1 } : s.scouting;
+        // Forget prospects who are gone (drafted or out of the pipeline): keeps the save bounded.
+        const live = new Set([...(moves.pipeline || []).map(p => p.id), ...(s.draftClass || []).map(p => p.id)]);
+        const onRoster = new Set(Object.values(rosters).flat().map(p => p.id));
+        const prune = (obj, keep) => Object.fromEntries(Object.entries(obj || {}).filter(([id]) => keep.has(id)));
+        const scouting = s.scouting ? { ...s.scouting, interviews: [], visits: [], year: s.year + 1, knowledge: prune(s.scouting.knowledge, live), crossChecked: prune(s.scouting.crossChecked, live), proKnowledge: prune(s.scouting.proKnowledge, onRoster) } : s.scouting;
         set({
             coachingStaff: coaches, rosters, teamRatings, collegePipeline: moves.pipeline, scouting,
             weeklyNews: [...headlines, ...(s.weeklyNews || [])].slice(0, 30),

@@ -165,7 +165,7 @@ try {
         // Mock drafts track the real draft, but boards disagree enough for reaches and steals.
         const st2 = store.getState();
         const full = [...st2.draftHistory.map(h => h.player), ...st2.draftClass];
-        const cons = S.mockDraft(full, st2.draftOrder.map(o => o.teamId), preDraftRosters);
+        const cons = S.mockDraft(full, st2.draftOrder.map(o => o.teamId), preDraftRosters, Object.fromEntries(TEAMS.map(t => [t.id, t.draftStyle])));
         const r1 = st2.draftHistory.filter(h => h.round === 1 && h.teamId !== user);
         const off = r1.map(h => Math.abs(h.pickNumber - cons.get(h.player.id).rank)).sort((a, b) => a - b);
         const median = off[Math.floor(off.length / 2)];

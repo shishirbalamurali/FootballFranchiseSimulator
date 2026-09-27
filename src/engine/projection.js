@@ -10,4 +10,5 @@ export function projectedOrder(state) {
     return Array.from({ length: 7 }, () => base).flat();
 }
 
-export const projectClass = (state, draftClass) => mockDraft(draftClass, projectedOrder(state), state.rosters);
+const STYLES = Object.fromEntries(TEAMS.map(t => [t.id, t.draftStyle]));
+export const projectClass = (state, draftClass) => mockDraft(draftClass, projectedOrder(state), state.rosters, STYLES);

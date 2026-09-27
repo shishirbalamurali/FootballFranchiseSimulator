@@ -548,3 +548,34 @@ Board protocol: one `CLAIM` line per agent per milestone listing files. Cross-ag
 3. **Staff budget**: a second budget alongside the cap, or free staff limited by headcount?
 4. **X-Factor count**: is 16 league-wide right (≈ 0.9%), or should it be even rarer (8–10)? Should the user be able to see *exactly* how an opponent's ability triggers, or only after facing him once (fog)?
 5. **Milestone order**: the plan now goes player card → scouting → draft → X-Factor in parallel. If trades are the bigger pain today, M7 can move up; it needs only M0–M1.
+
+---
+
+## 19. Implementation status (built 2026-09-27)
+
+Everything below ships on branch `claude/sleepy-carson-lml1e4`. `npm test` runs 14 suites including the new `tests/xFactor.mjs` and `tests/frontOffice.mjs`; `node tests/frontOfficeSoak.mjs` (not in `npm test`, ~45 s) plays four full franchise years with every stage auto-resolved.
+
+**Decisions taken on the open questions (§18):** lightweight college sim (results, poll, playoff); no fog-difficulty setting yet; a staff budget shared by coaches and scouts; 16 X-Factors league-wide, with rival abilities visible (they are public reputation); milestone order as planned.
+
+| Area | Where | What shipped |
+|---|---|---|
+| M0 fixes | `scouting.js`, `collegePipeline.js`, `tradeTalks.js`, store | No truth leaks (per-team derived noise; visible grade is perceived); deterministic trade answers; cap checks in every trade path; timer auto-pick uses your board; one pick chart (`assetValue.pickNumberValue`) |
+| Foundations | `assetValue.js`, `contracts.js`, `schemes.js`, `people.js`, `picks.js`, `inbox.js`, `offseasonCalendar.js`, `store/frontOfficeSlice.js` | Team modes, surplus value, future picks (2 drafts) + comp picks, dead money on cuts/trades, tags, tenders, 5th-year options, holdouts, 8 schemes + fit, derived GMs/agents/scouts, the Phone inbox, 8 offseason stages with Advance |
+| Player card | `components/player/*`, `engine/playerStatus.js` | Status-first card (one primary status + actions, 3 vitals, 5 tabs), compact card, status dots/pills, roster rows lead with status; `PlayerModal` is a wrapper |
+| Scouting | `scouting.js`, `screens/frontOffice/BigBoard.jsx` | Knowledge + range bars, scouts with eye/bias/hit rates, weekly assignments, pro scouting (trajectory, medicals), combine, 15 interviews, 10 visits, sleepers, pro comps, war-room opinions, camp reveal, draft history re-grades |
+| Draft | `screens/draft/DraftRoom.jsx`, `projection.js` | CPU clubs draft from their own boards; deterministic mock draft (median miss 3–4 picks in R1); three nights, ticker with reaches/steals/runs, trade up/down calls, Draft Card, UDFA scramble, media grade |
+| X-Factor | `xFactor.js`, `gameEngine.js` hooks, card/broadcast/matchup/recap/X-Factors page | Unique abilities (trigger, effect, activation, counter, twist), ≤16 active, awakenings/dormancy/levels, zone state machine in the play-by-play engine, "Scheme for him"; calibrated to about +0.6 points/game (see `tests/xFactor.mjs`) |
+| Saturdays | `collegeSeason.js`, `screens/frontOffice/Saturdays.jsx` | 96 fictional schools, 8 conferences, weekly results, Top 25, title games, 12-team playoff, Heisman, stock, 24 story arcs (stored as tiny markers), early declarations, transfers, attend-a-game |
+| Trades | `tradeTalks.js`, `TradeMachine.jsx` | Value band from the partner's side, counters (always acceptable as proposed), what-would-it-take (≤5 pieces), trade block offers, unsolicited calls, trade requests, GM trust, mode-driven league deals, deadline day |
+| Free agency | `faMarket.js`, `FreeAgency.jsx`, `Contracts.jsx` | Re-sign & tag window with advice, guarantees/bonus, agents, 3 visits + honest pitch, position heat map, 5-year cap chart, dead-money view |
+| Staff | `staffCareers.js`, `Staff.jsx` | Derived age/scheme/traits/ratings, QB and Development coaches (real progression effects), staff budget, interviews, successor, poaching decisions (block/let go), retirements, SVG tree, tree prestige, league trees; coordinator schemes lean play-calling |
+
+**Not built, or simplified (honest list):**
+- Incentives only change how attractive an offer is; they are never paid out or charged to the cap.
+- No transition tag and no RFA offer sheets or matching: tenders are simple one-year deals.
+- Dead money applies to the user's team only; CPU releases don't create dead money.
+- Scouting knowledge doesn't decay; it is pruned once prospects leave the pipeline.
+- Agent grudges, tree prestige as hiring pull, the Revenge twist, teammate chemistry and the Bloodlines owner goal from §12 are not wired.
+- No onboarding coach marks (§14).
+- The app's existing small-screen gate stays; new screens are desktop-first, and the player card is responsive.
+- The schedule generator (Codex's `schedule.js`) can rarely give up; `finalizeDraft` now retries so a season never starts empty.

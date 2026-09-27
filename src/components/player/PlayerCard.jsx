@@ -131,7 +131,7 @@ export function PlayerCardBody({ player, teamId, context = {}, onClose }) {
                         <span className="font-display text-h3 tabular-nums text-fg-muted">#{character.number}</span>
                         {team && <TeamCrest team={team} size="sm" decorative />}
                     </div>
-                    <h2 className="truncate font-display text-h1 uppercase leading-none text-fg">{livePlayer.name}</h2>
+                    <h2 className="break-words font-display text-h2 uppercase leading-none text-fg sm:text-h1">{livePlayer.name}</h2>
                     <p className="truncate text-label text-fg-secondary">
                         {team ? `${team.location} ${team.name}` : context.kind === 'prospect' ? livePlayer.college || 'Prospect' : 'Free agent'} · Age {livePlayer.age} · {character.height} {character.weightLb} lb
                     </p>
@@ -149,7 +149,7 @@ export function PlayerCardBody({ player, teamId, context = {}, onClose }) {
             </div>
 
             {/* ── Three vitals ── */}
-            <div className="grid grid-cols-3 gap-2 px-5 pt-4">
+            <div className="grid grid-cols-1 gap-2 px-5 pt-4 sm:grid-cols-3">
                 <Vital label="Role" value={context.kind === 'prospect' ? (context.projection || 'Prospect') : role?.starter ? 'Starter' : role && role.rank >= 0 ? `${livePlayer.position}${role.rank + 1}` : context.kind === 'fa' ? 'Unsigned' : '—'}
                     sub={role && role.rank >= 0 ? `${livePlayer.archetype || livePlayer.position}${fit != null && own ? ` · ${fitLabel(fit)}` : ''}` : livePlayer.archetype} />
                 <Vital label="Contract" value={context.ask ? `$${context.ask}M ask` : c.salary != null ? `$${c.salary}M` : '—'}
@@ -159,7 +159,7 @@ export function PlayerCardBody({ player, teamId, context = {}, onClose }) {
                 </Vital>
             </div>
 
-            <Tabs className="px-5 pt-2" value={tab} onChange={setTab} label="Player details"
+            <Tabs className="no-scrollbar overflow-x-auto px-5 pt-2" value={tab} onChange={setTab} label="Player details"
                 items={[{ id: 'overview', label: 'Overview' }, { id: 'ratings', label: 'Ratings' }, { id: 'career', label: 'Career' }, { id: 'contract', label: 'Contract' }, { id: 'personality', label: 'Personality' }]} />
 
             <div className="px-5 pb-5 pt-2">
