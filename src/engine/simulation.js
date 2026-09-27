@@ -74,6 +74,7 @@ function generateWeather(homeTeam) {
 
 // options.allowTie: false for postseason games, where overtime must produce a winner.
 // options.homePlan / awayPlan: coaching plans (see gamePlan.js) for either side.
+// options.context: game context from gamePlan.js#gamePlans (division, stakes, stage…).
 export function simulateGame(homeTeam, awayTeam, homeRoster, awayRoster, homeBonuses = null, awayBonuses = null, options = {}) {
     const allowTie = options.allowTie !== false;
     const homeState = initializeTeamState(homeTeam, homeRoster.filter(p => !p.injured));
@@ -85,6 +86,7 @@ export function simulateGame(homeTeam, awayTeam, homeRoster, awayRoster, homeBon
     const weather = generateWeather(homeTeam);
     const game = playGame(homeState, awayState, {
         weather, allowTie, homePlan: options.homePlan, awayPlan: options.awayPlan,
+        context: options.context?.engine || null, // CLAUDE K12: game context (gameContext.js)
     });
     const [hScore, aScore] = game.score;
 
@@ -102,8 +104,9 @@ export function simulateGame(homeTeam, awayTeam, homeRoster, awayRoster, homeBon
         // scoring play in order, and the full play-by-play with its name table.
         quarters:        game.quarters,
         scoringLog:      game.scoringLog,
-        pbp:             { plays: game.plays, names: game.names, form: game.form, plans: game.plans, xf: game.xfLog },
+        pbp:             { plays: game.plays, names: game.names, form: game.form, plans: game.plans, witching: game.witching, xf: game.xfLog },
         xfactor:         game.xfactor,
+        context:         options.context || null, // CLAUDE K12: read back by gamePlan.js#gameDetailFields
     };
 }
 

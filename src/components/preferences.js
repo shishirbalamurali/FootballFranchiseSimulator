@@ -14,14 +14,14 @@ const DEFAULTS = { simSpeed: 'slow' };
  *   broadcast: length of "Watch our game" after its kickoff card (ms)
  */
 export const SIM_SPEEDS = {
-  slow:    { intro: 1100, game: 8000, hold: 2000, broadcast: 28000 },
-  fast:    { intro: 350,  game: 2200, hold: 900,  broadcast: 11000 },
+  slow:    { intro: 1100, game: 8000, hold: 2000, broadcast: 42000 },
+  fast:    { intro: 350,  game: 2200, hold: 900,  broadcast: 15000 },
   instant: null,
 };
 
 export const SIM_SPEED_OPTIONS = [
-  { id: 'slow',    label: 'Slow',    blurb: 'Watch your game play out snap by snap (~30s), or a full league scoreboard.', seconds: '~30s' },
-  { id: 'fast',    label: 'Fast',    blurb: 'Same broadcast and scoreboard, sped up. Good for grinding a season.',       seconds: '~12s' },
+  { id: 'slow',    label: 'Slow',    blurb: 'Watch your game play out snap by snap (~45s, with speed controls), or a full league scoreboard.', seconds: '~45s' },
+  { id: 'fast',    label: 'Fast',    blurb: 'Same broadcast and scoreboard, sped up. Good for grinding a season.',       seconds: '~15s' },
   { id: 'instant', label: 'Instant', blurb: 'Skip the scoreboard and jump straight to the final.',                        seconds: '0s' },
 ];
 
